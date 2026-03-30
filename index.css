@@ -1,0 +1,437 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --bg-dark: #0F172A;
+    --bg-secondary: #1E293B;
+    --bg-tertiary: #334155;
+    --text-primary: #F1F5F9;
+    --text-secondary: #CBD5E1;
+    --accent: #FF6B6B;
+    --border-color: #475569;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-primary);
+    overflow-x: hidden;
+}
+
+.container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px;
+    min-height: 100vh;
+}
+
+/* Header */
+.header {
+    text-align: center;
+    padding: 30px 0 20px;
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: 30px;
+}
+
+.header h1 {
+    font-size: 32px;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}
+
+.subtitle {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+/* Buttons */
+.btn-add-challenge {
+    width: 100%;
+    padding: 16px;
+    background: linear-gradient(135deg, #FF6B6B 0%, #FF8E72 100%);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    margin-bottom: 30px;
+}
+
+.btn-add-challenge:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(255, 107, 107, 0.3);
+}
+
+.btn-add-challenge:active {
+    transform: translateY(0);
+}
+
+/* Challenges List */
+.challenges-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.challenge-card {
+    background-color: var(--bg-secondary);
+    border-radius: 16px;
+    padding: 20px;
+    border: 2px solid var(--border-color);
+    border-left: 6px solid;
+    transition: all 0.3s ease;
+}
+
+.challenge-card:hover {
+    border-color: var(--text-secondary);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+.challenge-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 16px;
+}
+
+.challenge-title {
+    flex: 1;
+}
+
+.challenge-title h3 {
+    font-size: 20px;
+    margin-bottom: 4px;
+}
+
+.challenge-details {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.btn-delete {
+    background-color: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 20px;
+    padding: 4px 8px;
+    transition: color 0.2s;
+}
+
+.btn-delete:hover {
+    color: #FF6B6B;
+}
+
+/* Streak Counter */
+.streak-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding: 12px;
+    background-color: rgba(255, 107, 107, 0.1);
+    border-radius: 10px;
+    width: fit-content;
+}
+
+.streak-count {
+    font-size: 24px;
+    font-weight: bold;
+    color: #FF6B6B;
+    min-width: 30px;
+}
+
+.streak-label {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+/* Calendar */
+.calendar {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.calendar-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    margin-bottom: 8px;
+    text-align: center;
+}
+
+.day-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 600;
+    padding: 8px 0;
+}
+
+.calendar-day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--bg-tertiary);
+    border-radius: 8px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.2s;
+    color: var(--text-secondary);
+}
+
+.calendar-day:hover {
+    border-color: var(--text-secondary);
+}
+
+.calendar-day.completed {
+    background-color: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
+.calendar-day.today {
+    border-color: var(--text-primary);
+}
+
+.calendar-day.other-month {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.calendar-day.other-month:hover {
+    border-color: transparent;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+}
+
+.empty-state p {
+    font-size: 24px;
+    margin-bottom: 8px;
+}
+
+.empty-subtitle {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    animation: fadeIn 0.3s;
+}
+
+.modal.active {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(100%);
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+
+.modal-content {
+    background-color: var(--bg-secondary);
+    width: 100%;
+    max-width: 500px;
+    border-radius: 20px 20px 0 0;
+    padding: 24px;
+    animation: slideUp 0.3s;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.modal-header h2 {
+    font-size: 24px;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-size: 28px;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.close-btn:hover {
+    color: #FF6B6B;
+}
+
+/* Form */
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.form-group input[type="text"] {
+    width: 100%;
+    padding: 12px;
+    background-color: var(--bg-tertiary);
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 16px;
+    transition: border-color 0.2s;
+}
+
+.form-group input[type="text"]:focus {
+    outline: none;
+    border-color: #FF6B6B;
+}
+
+.color-picker {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.color-picker input[type="radio"] {
+    display: none;
+}
+
+.color-picker label {
+    width: 50px;
+    height: 50px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 3px solid transparent;
+    transition: all 0.2s;
+}
+
+.color-picker input[type="radio"]:checked + label {
+    border-color: var(--text-primary);
+    transform: scale(1.1);
+}
+
+.btn-submit {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, #FF6B6B 0%, #FF8E72 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.btn-submit:hover {
+    transform: translateY(-2px);
+}
+
+.btn-submit:active {
+    transform: translateY(0);
+}
+
+/* Month Navigation */
+.month-navigation {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding: 12px;
+    background-color: var(--bg-tertiary);
+    border-radius: 8px;
+}
+
+.month-navigation button {
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 4px 8px;
+    transition: color 0.2s;
+}
+
+.month-navigation button:hover {
+    color: #FF6B6B;
+}
+
+.month-navigation span {
+    font-weight: 600;
+    min-width: 100px;
+    text-align: center;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+    .container {
+        padding: 16px;
+    }
+
+    .header h1 {
+        font-size: 28px;
+    }
+
+    .challenge-card {
+        padding: 16px;
+    }
+
+    .modal-content {
+        padding: 20px;
+    }
+
+    .color-picker label {
+        width: 45px;
+        height: 45px;
+    }
+}
