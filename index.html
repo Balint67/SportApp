@@ -7,38 +7,145 @@
     <link rel="stylesheet" href="index.css">
 </head>
 <body>
+    <!-- Authentication Screen -->
+    <div id="authScreen" class="auth-screen">
+        <div class="auth-container">
+            <div class="auth-header">
+                <h1>💪 Sport Tracker</h1>
+                <p>Track your daily goals & compete globally</p>
+            </div>
+
+            <!-- Login Form -->
+            <div id="loginForm" class="auth-form active">
+                <h2>Login</h2>
+                <div class="form-group">
+                    <label for="loginEmail">Email</label>
+                    <input type="email" id="loginEmail" placeholder="your@email.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" placeholder="••••••••" required>
+                </div>
+                <button class="btn-auth" onclick="loginUser()">Login</button>
+                <p class="auth-toggle">Don't have an account? <a onclick="showSignup()">Sign up</a></p>
+                <div id="loginError" class="auth-error"></div>
+            </div>
+
+            <!-- Signup Form -->
+            <div id="signupForm" class="auth-form">
+                <h2>Create Account</h2>
+                <div class="form-group">
+                    <label for="signupUsername">Username</label>
+                    <input type="text" id="signupUsername" placeholder="Choose a username" required>
+                </div>
+                <div class="form-group">
+                    <label for="signupEmail">Email</label>
+                    <input type="email" id="signupEmail" placeholder="your@email.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="signupPassword">Password</label>
+                    <input type="password" id="signupPassword" placeholder="••••••••" required>
+                </div>
+                <div class="form-group">
+                    <label for="signupConfirmPassword">Confirm Password</label>
+                    <input type="password" id="signupConfirmPassword" placeholder="••••••••" required>
+                </div>
+                <button class="btn-auth" onclick="signupUser()">Create Account</button>
+                <p class="auth-toggle">Already have an account? <a onclick="showLogin()">Login</a></p>
+                <div id="signupError" class="auth-error"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="appContainer" class="app-container" style="display: none;">
     <div class="container">
         <!-- Header -->
         <header class="header">
-            <h1>💪 Sport Challenges</h1>
+            <h1>💪 Sport Tracker</h1>
             <p class="subtitle">Track your daily goals</p>
         </header>
 
-        <!-- Add New Challenge Button -->
-        <button class="btn-add-challenge" onclick="openCreateModal()">
-            + New Challenge
-        </button>
-
-        <!-- Challenges List -->
-        <div id="challengesList" class="challenges-list">
-            <!-- Challenges will be dynamically inserted here -->
+        <!-- User Profile Card -->
+        <div class="profile-card">
+            <div class="profile-avatar" onclick="openProfileModal()">
+                <span id="avatarIcon" class="avatar-icon">🥚</span>
+                <span id="avatarRank" class="avatar-rank">Scout</span>
+            </div>
+            <div class="profile-stats">
+                <div class="stat-item">
+                    <span class="stat-number" id="totalPoints">0</span>
+                    <span class="stat-label">Points</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number" id="shieldCount">0</span>
+                    <span class="stat-label">Shields</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number" id="badgeCount">0</span>
+                    <span class="stat-label">Badges</span>
+                </div>
+            </div>
+            <button class="btn-profile" onclick="openProfileModal()">View Profile</button>
         </div>
 
-        <!-- Empty State -->
-        <div id="emptyState" class="empty-state">
-            <p>📋 No challenges yet</p>
-            <p class="empty-subtitle">Create your first challenge to get started!</p>
+        <!-- Navigation Tabs -->
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="switchTab('challenges')">
+                🎯 Challenges
+            </button>
+            <button class="nav-tab" onclick="switchTab('workouts')">
+                🏋️ Workouts
+            </button>
+        </div>
+
+        <!-- Challenges Tab -->
+        <div id="challengesTab" class="tab-content active">
+            <!-- Add New Challenge Button -->
+            <button class="btn-add-challenge" onclick="openCreateModal('challenge')">
+                + New Challenge
+            </button>
+
+            <!-- Challenges List -->
+            <div id="challengesList" class="challenges-list">
+                <!-- Challenges will be dynamically inserted here -->
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyChallengesState" class="empty-state">
+                <p>📋 No challenges yet</p>
+                <p class="empty-subtitle">Create your first challenge to get started!</p>
+            </div>
+        </div>
+
+        <!-- Workouts Tab -->
+        <div id="workoutsTab" class="tab-content">
+            <!-- Add New Workout Button -->
+            <button class="btn-add-workout" onclick="openCreateModal('workout')">
+                + New Workout
+            </button>
+
+            <!-- Workouts List -->
+            <div id="workoutsList" class="workouts-list">
+                <!-- Workouts will be dynamically inserted here -->
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyWorkoutsState" class="empty-state">
+                <p>🏋️ No workouts yet</p>
+                <p class="empty-subtitle">Create your first workout to get started!</p>
+            </div>
         </div>
     </div>
 
     <!-- Create Challenge Modal -->
-    <div id="createModal" class="modal">
+    <div id="createChallengeModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h2>New Challenge</h2>
-                <button class="close-btn" onclick="closeCreateModal()">&times;</button>
+                <button class="close-btn" onclick="closeCreateModal('challenge')">&times;</button>
             </div>
-            <form id="createForm" onsubmit="createChallenge(event)">
+            <form id="createChallengeForm" onsubmit="createChallenge(event)">
                 <div class="form-group">
                     <label for="challengeName">Challenge Name</label>
                     <input type="text" id="challengeName" placeholder="e.g., Pull-ups" required>
@@ -67,6 +174,24 @@
                         
                         <input type="radio" name="color" value="#F38181" id="color6">
                         <label for="color6" style="background-color: #F38181;"></label>
+
+                        <input type="radio" name="color" value="#9B59B6" id="color7">
+                        <label for="color7" style="background-color: #9B59B6;"></label>
+                        
+                        <input type="radio" name="color" value="#2ECC71" id="color8">
+                        <label for="color8" style="background-color: #2ECC71;"></label>
+                        
+                        <input type="radio" name="color" value="#F1C40F" id="color9">
+                        <label for="color9" style="background-color: #F1C40F;"></label>
+                        
+                        <input type="radio" name="color" value="#E74C3C" id="color10">
+                        <label for="color10" style="background-color: #E74C3C;"></label>
+                        
+                        <input type="radio" name="color" value="#3498DB" id="color11">
+                        <label for="color11" style="background-color: #3498DB;"></label>
+                        
+                        <input type="radio" name="color" value="#1ABC9C" id="color12">
+                        <label for="color12" style="background-color: #1ABC9C;"></label>
                     </div>
                 </div>
                 <button type="submit" class="btn-submit">Create Challenge</button>
@@ -74,6 +199,373 @@
         </div>
     </div>
 
+    <!-- Create Workout Modal -->
+    <div id="createWorkoutModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>New Workout</h2>
+                <button class="close-btn" onclick="closeCreateModal('workout')">&times;</button>
+            </div>
+            <form id="createWorkoutForm" onsubmit="createWorkout(event)">
+                <div class="form-group">
+                    <label for="workoutName">Workout Name</label>
+                    <input type="text" id="workoutName" placeholder="e.g., Running Routine" required>
+                </div>
+                <div class="form-group">
+                    <label for="workoutDetails">Details</label>
+                    <input type="text" id="workoutDetails" placeholder="e.g., 5km run">
+                </div>
+                <div class="form-group">
+                    <label>Select Workout Days</label>
+                    <div class="day-picker">
+                        <button type="button" class="day-btn" data-day="0">Sun</button>
+                        <button type="button" class="day-btn" data-day="1">Mon</button>
+                        <button type="button" class="day-btn" data-day="2">Tue</button>
+                        <button type="button" class="day-btn" data-day="3">Wed</button>
+                        <button type="button" class="day-btn" data-day="4">Thu</button>
+                        <button type="button" class="day-btn" data-day="5">Fri</button>
+                        <button type="button" class="day-btn" data-day="6">Sat</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="workoutColor">Color</label>
+                    <div class="color-picker">
+                        <input type="radio" name="workout-color" value="#FF6B6B" id="wcolor1" checked>
+                        <label for="wcolor1" style="background-color: #FF6B6B;"></label>
+                        
+                        <input type="radio" name="workout-color" value="#4ECDC4" id="wcolor2">
+                        <label for="wcolor2" style="background-color: #4ECDC4;"></label>
+                        
+                        <input type="radio" name="workout-color" value="#45B7D1" id="wcolor3">
+                        <label for="wcolor3" style="background-color: #45B7D1;"></label>
+                        
+                        <input type="radio" name="workout-color" value="#FFA502" id="wcolor4">
+                        <label for="wcolor4" style="background-color: #FFA502;"></label>
+                        
+                        <input type="radio" name="workout-color" value="#95E1D3" id="wcolor5">
+                        <label for="wcolor5" style="background-color: #95E1D3;"></label>
+                        
+                        <input type="radio" name="workout-color" value="#F38181" id="wcolor6">
+                        <label for="wcolor6" style="background-color: #F38181;"></label>
+
+                        <input type="radio" name="workout-color" value="#9B59B6" id="wcolor7">
+                        <label for="wcolor7" style="background-color: #9B59B6;"></label>
+                        
+                        <input type="radio" name="workout-color" value="#2ECC71" id="wcolor8">
+                        <label for="wcolor8" style="background-color: #2ECC71;"></label>
+                        
+                        <input type="radio" name="workout-color" value="#F1C40F" id="wcolor9">
+                        <label for="wcolor9" style="background-color: #F1C40F;"></label>
+                        
+                        <input type="radio" name="workout-color" value="#E74C3C" id="wcolor10">
+                        <label for="wcolor10" style="background-color: #E74C3C;"></label>
+                        
+                        <input type="radio" name="workout-color" value="#3498DB" id="wcolor11">
+                        <label for="wcolor11" style="background-color: #3498DB;"></label>
+                        
+                        <input type="radio" name="workout-color" value="#1ABC9C" id="wcolor12">
+                        <label for="wcolor12" style="background-color: #1ABC9C;"></label>
+                    </div>
+                </div>
+                <button type="submit" class="btn-submit">Create Workout</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Ghost Mode - Start Workout Modal -->
+    <div id="ghostModeModal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2>👻 Ghost Mode Racing</h2>
+                <button class="close-btn" onclick="closeGhostMode()">&times;</button>
+            </div>
+            <div class="ghost-mode-container">
+                <div id="workoutInfo" class="workout-info">
+                    <h3 id="ghostWorkoutName"></h3>
+                    <p id="ghostWorkoutDetails"></p>
+                </div>
+
+                <!-- Ghost Progress Comparison -->
+                <div id="ghostComparison" class="ghost-comparison">
+                    <div class="ghost-label">👻 Your Ghost</div>
+                    <div class="ghost-progress-bar">
+                        <div id="ghostProgress" class="ghost-runner" style="left: 0%;">👻</div>
+                        <div id="userProgress" class="user-runner" style="left: 0%;">🏃</div>
+                    </div>
+                    <div class="ghost-stats">
+                        <div class="stat green">
+                            <span class="stat-label">Your Best:</span>
+                            <span id="ghostBestTime" class="stat-value">-</span>
+                        </div>
+                        <div class="stat blue">
+                            <span class="stat-label">Current:</span>
+                            <span id="currentTime" class="stat-value">0:00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Workout Input -->
+                <div class="ghost-input-section">
+                    <div class="input-group">
+                        <label for="repsInput">Reps/Sets (optional)</label>
+                        <input type="text" id="repsInput" placeholder="e.g., 20 pull-ups or 5x5">
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="ghost-actions">
+                    <button onclick="startWorkoutTimer()" class="btn-ghost-start">▶️ Start Timer</button>
+                    <button onclick="stopWorkoutTimer()" class="btn-ghost-stop" style="display: none;">⏹️ Stop Timer</button>
+                    <button onclick="cancelGhostMode()" class="btn-ghost-cancel">Cancel</button>
+                </div>
+
+                <!-- Timer Status -->
+                <div id="timerRunning" class="timer-status" style="display: none;">
+                    ⏱️ Workout in progress...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ghost Mode - Results Modal -->
+    <div id="ghostResultsModal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2 id="resultsTitle">🎉 Workout Complete!</h2>
+                <button class="close-btn" onclick="closeGhostResults()">&times;</button>
+            </div>
+            <div class="ghost-results-container">
+                <div id="ghostResultsContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Modal -->
+    <div id="profileModal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2>Your Profile</h2>
+                <button class="close-btn" onclick="closeProfileModal()">&times;</button>
+            </div>
+            <div class="profile-container">
+                <div class="profile-header">
+                    <div class="profile-avatar-large">
+                        <span id="profileAvatarIcon" class="avatar-icon-large">🥚</span>
+                    </div>
+                    <div class="profile-title">
+                        <h3 id="profileRankTitle">Scout</h3>
+                        <p id="profileRankDescription">Just starting your journey...</p>
+                    </div>
+                </div>
+
+                <div class="profile-sections">
+                    <!-- Points Section -->
+                    <div class="profile-section">
+                        <h4>💰 Points & Progression</h4>
+                        <div class="points-display">
+                            <div class="big-stat">
+                                <span id="profilePoints">0</span>
+                                <span>Total Points</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div id="rankProgress" class="progress-fill" style="width: 0%;"></div>
+                            </div>
+                            <p id="rankProgressText" class="progress-text">0 / 100 points to next rank</p>
+                        </div>
+                    </div>
+
+                    <!-- Shields Section -->
+                    <div class="profile-section">
+                        <h4>🛡️ Streak Shields</h4>
+                        <div class="shields-display">
+                            <div class="shield-info">
+                                <span id="profileShields">0</span> shields available
+                            </div>
+                            <button class="btn-buy-shield" onclick="buyShield()">Buy Shield (100 points)</button>
+                            <p class="shield-description">Protects your streak for one missed day</p>
+                        </div>
+                    </div>
+
+                    <!-- Badges Section -->
+                    <div class="profile-section">
+                        <h4>🏆 Achievement Badges</h4>
+                        <div id="badgesDisplay" class="badges-grid">
+                            <!-- Badges will be displayed here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Profile Actions -->
+                <div class="profile-footer">
+                    <button class="btn-close-profile" onclick="closeProfileModal()">Close</button>
+                    <button class="btn-logout" onclick="logoutUser()">🚪 Logout</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+    </div>
+
     <script src="index.js"></script>
+    <script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+  import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+
+  // Your web app's Firebase configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyC0IHjFrHuz-DQznjMQFlvFh9IGqJWnqpA",
+    authDomain: "sport-tracker-40146.firebaseapp.com",
+    projectId: "sport-tracker-40146",
+    storageBucket: "sport-tracker-40146.firebasestorage.app",
+    messagingSenderId: "25551349252",
+    appId: "1:25551349252:web:dd7a6590770507764f7751"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+
+  // Expose globally for use in index.js
+  window.db = db;
+  window.auth = auth;
+  window.Firebase = {
+    db,
+    auth,
+    doc,
+    setDoc,
+    getDoc,
+    collection,
+    query,
+    where,
+    getDocs,
+    addDoc,
+    serverTimestamp,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged
+  };
+
+  // Check authentication state on page load
+  onAuthStateChanged(auth, (user) => {
+    const authScreen = document.getElementById('authScreen');
+    const appContainer = document.getElementById('appContainer');
+    
+    if (user) {
+      // User is logged in
+      authScreen.style.display = 'none';
+      appContainer.style.display = 'block';
+      localStorage.setItem('userEmail', user.email);
+      localStorage.setItem('userId', user.uid);
+      // Initialize app for logged-in user
+      if (typeof initializeAppForUser === 'function') {
+        initializeAppForUser(user);
+      }
+    } else {
+      // User is not logged in
+      authScreen.style.display = 'block';
+      appContainer.style.display = 'none';
+    }
+  });
+
+  // Show login form
+  window.showLogin = function() {
+    document.getElementById('loginForm').classList.add('active');
+    document.getElementById('signupForm').classList.remove('active');
+  };
+
+  // Show signup form
+  window.showSignup = function() {
+    document.getElementById('loginForm').classList.remove('active');
+    document.getElementById('signupForm').classList.add('active');
+  };
+
+  // Login user
+  window.loginUser = async function() {
+    const email = document.getElementById('loginEmail').value;
+    const password = document.getElementById('loginPassword').value;
+    const errorDiv = document.getElementById('loginError');
+    errorDiv.textContent = '';
+
+    try {
+      if (!email || !password) {
+        throw new Error('Please enter email and password');
+      }
+      await signInWithEmailAndPassword(auth, email, password);
+      document.getElementById('loginEmail').value = '';
+      document.getElementById('loginPassword').value = '';
+    } catch (error) {
+      errorDiv.textContent = error.message;
+    }
+  };
+
+  // Signup user
+  window.signupUser = async function() {
+    const username = document.getElementById('signupUsername').value;
+    const email = document.getElementById('signupEmail').value;
+    const password = document.getElementById('signupPassword').value;
+    const confirmPassword = document.getElementById('signupConfirmPassword').value;
+    const errorDiv = document.getElementById('signupError');
+    errorDiv.textContent = '';
+
+    try {
+      if (!username || !email || !password || !confirmPassword) {
+        throw new Error('Please fill in all fields');
+      }
+      if (password !== confirmPassword) {
+        throw new Error('Passwords do not match');
+      }
+      if (password.length < 6) {
+        throw new Error('Password must be at least 6 characters');
+      }
+
+      // Create user account
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      
+      // Create user profile in Firestore with initial stats
+      const { doc, setDoc } = window.Firebase;
+      const userDocRef = doc(window.db, 'users', user.uid);
+      await setDoc(userDocRef, {
+        username: username,
+        email: email,
+        points: 0,
+        shields: 0,
+        unlockedBadges: [],
+        challenges: [],
+        workouts: [],
+        createdAt: new Date().toISOString()
+      });
+      
+      // Clear form
+      document.getElementById('signupUsername').value = '';
+      document.getElementById('signupEmail').value = '';
+      document.getElementById('signupPassword').value = '';
+      document.getElementById('signupConfirmPassword').value = '';
+    } catch (error) {
+      errorDiv.textContent = error.message;
+    }
+  };
+
+  // Logout user
+  window.logoutUser = async function() {
+    try {
+      await signOut(auth);
+      document.getElementById('loginEmail').value = '';
+      document.getElementById('loginPassword').value = '';
+      localStorage.removeItem('userEmail');
+      localStorage.removeItem('userId');
+      // Reset app data
+      if (typeof cleanupOnLogout === 'function') {
+        cleanupOnLogout();
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+</script>
 </body>
 </html>
