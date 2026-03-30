@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sport Challenge Tracker</title>
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>💪 Sport Challenges</h1>
+            <p class="subtitle">Track your daily goals</p>
+        </header>
+
+        <!-- Add New Challenge Button -->
+        <button class="btn-add-challenge" onclick="openCreateModal()">
+            + New Challenge
+        </button>
+
+        <!-- Challenges List -->
+        <div id="challengesList" class="challenges-list">
+            <!-- Challenges will be dynamically inserted here -->
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="empty-state">
+            <p>📋 No challenges yet</p>
+            <p class="empty-subtitle">Create your first challenge to get started!</p>
+        </div>
+    </div>
+
+    <!-- Create Challenge Modal -->
+    <div id="createModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>New Challenge</h2>
+                <button class="close-btn" onclick="closeCreateModal()">&times;</button>
+            </div>
+            <form id="createForm" onsubmit="createChallenge(event)">
+                <div class="form-group">
+                    <label for="challengeName">Challenge Name</label>
+                    <input type="text" id="challengeName" placeholder="e.g., Pull-ups" required>
+                </div>
+                <div class="form-group">
+                    <label for="challengeDetails">Details</label>
+                    <input type="text" id="challengeDetails" placeholder="e.g., 20 chest to bar pull-ups">
+                </div>
+                <div class="form-group">
+                    <label for="challengeColor">Color</label>
+                    <div class="color-picker">
+                        <input type="radio" name="color" value="#FF6B6B" id="color1" checked>
+                        <label for="color1" style="background-color: #FF6B6B;"></label>
+                        
+                        <input type="radio" name="color" value="#4ECDC4" id="color2">
+                        <label for="color2" style="background-color: #4ECDC4;"></label>
+                        
+                        <input type="radio" name="color" value="#45B7D1" id="color3">
+                        <label for="color3" style="background-color: #45B7D1;"></label>
+                        
+                        <input type="radio" name="color" value="#FFA502" id="color4">
+                        <label for="color4" style="background-color: #FFA502;"></label>
+                        
+                        <input type="radio" name="color" value="#95E1D3" id="color5">
+                        <label for="color5" style="background-color: #95E1D3;"></label>
+                        
+                        <input type="radio" name="color" value="#F38181" id="color6">
+                        <label for="color6" style="background-color: #F38181;"></label>
+                    </div>
+                </div>
+                <button type="submit" class="btn-submit">Create Challenge</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
