@@ -897,7 +897,7 @@ body {
     border-radius: 16px;
     padding: 20px;
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto minmax(140px, 1fr) minmax(220px, 1fr) auto;
     gap: 20px;
     align-items: center;
     margin-bottom: 24px;
@@ -927,6 +927,24 @@ body {
     font-weight: 600;
     color: var(--text-secondary);
     text-transform: uppercase;
+}
+
+.profile-identity {
+    min-width: 0;
+}
+
+.profile-name {
+    margin: 0 0 4px;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.profile-email {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+    overflow-wrap: anywhere;
 }
 
 .profile-stats {
@@ -1008,6 +1026,16 @@ body {
     margin: 0 0 8px 0;
     color: var(--text-primary);
     font-size: 24px;
+}
+
+.profile-member-since {
+    display: inline-block;
+    margin: 0 0 6px;
+    color: #4ECDC4;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
 }
 
 .profile-title p {
@@ -1204,6 +1232,51 @@ body {
     opacity: 0.6;
 }
 
+.milestones-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.milestone-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: rgba(78, 205, 196, 0.08);
+    border: 1px solid rgba(78, 205, 196, 0.16);
+}
+
+.milestone-copy {
+    min-width: 0;
+}
+
+.milestone-copy strong {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--text-primary);
+}
+
+.milestone-copy p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.milestone-date {
+    flex-shrink: 0;
+    color: #4ECDC4;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.milestone-empty {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
 /* Profile Footer */
 .profile-footer {
     display: flex;
@@ -1268,6 +1341,20 @@ body {
     .color-picker label {
         width: 45px;
         height: 45px;
+    }
+
+    .profile-card {
+        grid-template-columns: 1fr;
+        justify-items: center;
+        text-align: center;
+    }
+
+    .profile-stats {
+        width: 100%;
+    }
+
+    .milestone-item {
+        flex-direction: column;
     }
 }
 
@@ -1379,6 +1466,19 @@ body {
 
 .btn-auth:active {
     transform: translateY(0);
+}
+
+.btn-google {
+    margin-top: 12px;
+    background: #ffffff;
+    color: #1f1f1f;
+    border: 1px solid #d0d7de;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+.btn-google:hover {
+    background: #f8fafc;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
 }
 
 .auth-toggle {

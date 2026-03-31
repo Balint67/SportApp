@@ -2,15 +2,45 @@
 const STORAGE_CHALLENGES_KEY = 'sportChallenges';
 const STORAGE_WORKOUTS_KEY = 'sportWorkouts';
 const STORAGE_PROFILE_KEY = 'sportProfile';
+const STORAGE_AUTH_USER_KEY = 'sportAuthUserId';
+
+function getDefaultProfile() {
+    return {
+        username: 'Athlete',
+        email: '',
+        points: 0,
+        shields: 0,
+        unlockedBadges: [],
+        milestones: [],
+        createdAt: new Date().toISOString()
+    };
+}
+
+function recordMilestone(type, title, description = '', saveImmediately = true) {
+    const milestone = {
+        id: `${type}-${Date.now()}`,
+        type,
+        title,
+        description,
+        createdAt: new Date().toISOString()
+    };
+
+    const existingMilestones = Array.isArray(userProfile.milestones) ? userProfile.milestones : [];
+    userProfile.milestones = [milestone, ...existingMilestones].slice(0, 50);
+
+    if (saveImmediately) {
+        saveProfile();
+    }
+}
+
+function getStorageKey(baseKey) {
+    return userId ? `${baseKey}:${userId}` : baseKey;
+}
 
 let challenges = [];
 let workouts = [];
 let selectedDays = []; // For day picker in modal
-let userProfile = {
-    points: 0,
-    shields: 0,
-    unlockedBadges: []
-};
+let userProfile = getDefaultProfile();
 let userId = null;
 let useFirestore = false;
 
@@ -29,6 +59,7 @@ let ghostModePerformance = {
 async function initializeAppForUser(user) {
     userId = user.uid;
     useFirestore = true;
+    localStorage.setItem(STORAGE_AUTH_USER_KEY, user.uid);
     
     // Load user data from Firestore
     try {
@@ -55,11 +86,11 @@ function cleanupOnLogout() {
     challenges = [];
     workouts = [];
     selectedDays = [];
-    userProfile = {
-        points: 0,
-        shields: 0,
-        unlockedBadges: []
-    };
+    userProfile = getDefaultProfile();
+    localStorage.removeItem(STORAGE_AUTH_USER_KEY);
+    updateProfileCard();
+    renderChallenges();
+    renderWorkouts();
 }
 
 async function loadProfileFromFirestore() {
@@ -70,11 +101,17 @@ async function loadProfileFromFirestore() {
         const docSnap = await getDoc(userDocRef);
         
         if (docSnap.exists()) {
-            userProfile = docSnap.data();
+            userProfile = {
+                ...getDefaultProfile(),
+                ...docSnap.data()
+            };
+            userProfile.unlockedBadges = Array.isArray(userProfile.unlockedBadges) ? userProfile.unlockedBadges : [];
+            userProfile.milestones = Array.isArray(userProfile.milestones) ? userProfile.milestones : [];
         } else {
             // Create new user profile
             await saveProfileToFirestore();
         }
+        localStorage.setItem(getStorageKey(STORAGE_PROFILE_KEY), JSON.stringify(userProfile));
     } catch (error) {
         console.error('Error loading profile from Firestore:', error);
         // Fall back to localStorage
@@ -106,6 +143,7 @@ async function loadChallengesFromFirestore() {
         } else {
             challenges = [];
         }
+        localStorage.setItem(getStorageKey(STORAGE_CHALLENGES_KEY), JSON.stringify(challenges));
     } catch (error) {
         console.error('Error loading challenges from Firestore:', error);
         loadChallenges();
@@ -121,6 +159,7 @@ async function loadWorkoutsFromFirestore() {
         } else {
             workouts = [];
         }
+        localStorage.setItem(getStorageKey(STORAGE_WORKOUTS_KEY), JSON.stringify(workouts));
     } catch (error) {
         console.error('Error loading workouts from Firestore:', error);
         loadWorkouts();
@@ -151,21 +190,12 @@ async function saveWorkoutsToFirestore() {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    // Check if user is already logged in
-    const storedUserId = localStorage.getItem('userId');
-    
-    if (storedUserId) {
-        userId = storedUserId;
-        initializeAppForUser({uid: userId});
-    } else {
-        // Fall back to localStorage for now
-        loadChallenges();
-        loadWorkouts();
-        loadProfile();
-        renderChallenges();
-        renderWorkouts();
-        updateProfileCard();
-    }
+    loadChallenges();
+    loadWorkouts();
+    loadProfile();
+    renderChallenges();
+    renderWorkouts();
+    updateProfileCard();
 
     // Event delegation for challenge calendar days
     document.getElementById('challengesList').addEventListener('click', (e) => {
@@ -200,13 +230,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Load challenges from localStorage
 function loadChallenges() {
-    const stored = localStorage.getItem(STORAGE_CHALLENGES_KEY);
+    const stored = localStorage.getItem(getStorageKey(STORAGE_CHALLENGES_KEY));
     challenges = stored ? JSON.parse(stored) : [];
 }
 
 // Save challenges to localStorage
 function saveChallenges() {
-    localStorage.setItem(STORAGE_CHALLENGES_KEY, JSON.stringify(challenges));
+    localStorage.setItem(getStorageKey(STORAGE_CHALLENGES_KEY), JSON.stringify(challenges));
     
     // Also save to Firestore if available
     if (useFirestore && userId && window.db) {
@@ -218,13 +248,13 @@ function saveChallenges() {
 
 // Load workouts from localStorage
 function loadWorkouts() {
-    const stored = localStorage.getItem(STORAGE_WORKOUTS_KEY);
+    const stored = localStorage.getItem(getStorageKey(STORAGE_WORKOUTS_KEY));
     workouts = stored ? JSON.parse(stored) : [];
 }
 
 // Save workouts to localStorage
 function saveWorkouts() {
-    localStorage.setItem(STORAGE_WORKOUTS_KEY, JSON.stringify(workouts));
+    localStorage.setItem(getStorageKey(STORAGE_WORKOUTS_KEY), JSON.stringify(workouts));
     
     // Also save to Firestore if available
     if (useFirestore && userId && window.db) {
@@ -236,21 +266,22 @@ function saveWorkouts() {
 
 // Load user profile from localStorage
 function loadProfile() {
-    const stored = localStorage.getItem(STORAGE_PROFILE_KEY);
+    const stored = localStorage.getItem(getStorageKey(STORAGE_PROFILE_KEY));
     if (stored) {
-        userProfile = JSON.parse(stored);
-    } else {
         userProfile = {
-            points: 0,
-            shields: 0,
-            unlockedBadges: []
+            ...getDefaultProfile(),
+            ...JSON.parse(stored)
         };
+    } else {
+        userProfile = getDefaultProfile();
     }
+    userProfile.unlockedBadges = Array.isArray(userProfile.unlockedBadges) ? userProfile.unlockedBadges : [];
+    userProfile.milestones = Array.isArray(userProfile.milestones) ? userProfile.milestones : [];
 }
 
 // Save user profile to localStorage and Firestore
 function saveProfile() {
-    localStorage.setItem(STORAGE_PROFILE_KEY, JSON.stringify(userProfile));
+    localStorage.setItem(getStorageKey(STORAGE_PROFILE_KEY), JSON.stringify(userProfile));
     
     // Also save to Firestore if available
     if (useFirestore && userId && window.db) {
@@ -280,6 +311,7 @@ function createChallenge(event) {
     };
 
     challenges.push(challenge);
+    recordMilestone('challenge-created', `Created challenge "${name}"`, details || 'A new challenge is ready to track.');
     saveChallenges();
     renderChallenges();
 
@@ -313,6 +345,11 @@ function createWorkout(event) {
     };
 
     workouts.push(workout);
+    recordMilestone(
+        'workout-created',
+        `Created workout "${name}"`,
+        `Scheduled on ${getWorkoutDayNames([...selectedDays]).join(', ')}`
+    );
     saveWorkouts();
     renderWorkouts();
 
@@ -353,6 +390,7 @@ function toggleChallengeDay(challengeId, dateStr) {
             const streak = getChallengeStreak(challenge);
             const points = calculatePoints('challenge', streak);
             addPoints(points);
+            recordMilestone('challenge-complete', `Completed "${challenge.name}"`, `${dateStr} completion saved with a ${streak}-day streak.`);
         }
         saveChallenges();
         renderChallenges();
@@ -371,6 +409,7 @@ function toggleWorkoutDay(workoutId, dateStr) {
             const streak = getWorkoutStreak(workout);
             const points = calculatePoints('workout', streak);
             addPoints(points);
+            recordMilestone('workout-complete', `Completed workout "${workout.name}"`, `${dateStr} completion saved with a ${streak}-day streak.`);
         }
         saveWorkouts();
         renderWorkouts();
@@ -909,6 +948,11 @@ function finishWorkout() {
     const streak = getWorkoutStreak(ghostModeWorkout);
     const points = calculatePoints('workout', streak);
     addPoints(points);
+    recordMilestone(
+        'ghost-workout',
+        `Finished Ghost Mode for "${ghostModeWorkout.name}"`,
+        `Time: ${formatTime(ghostModePerformance.duration)}${ghostModePerformance.reps ? `, Reps: ${ghostModePerformance.reps}` : ''}.`
+    );
 
     saveWorkouts();
     renderWorkouts();
@@ -1104,6 +1148,22 @@ function updateProfileCard() {
     document.getElementById('totalPoints').textContent = userProfile.points;
     document.getElementById('shieldCount').textContent = userProfile.shields;
     document.getElementById('badgeCount').textContent = userProfile.unlockedBadges.length;
+
+    const profileName = document.getElementById('profileName');
+    const profileEmail = document.getElementById('profileEmail');
+    const profileMemberSince = document.getElementById('profileMemberSince');
+
+    if (profileName) {
+        profileName.textContent = userProfile.username || 'Athlete';
+    }
+    if (profileEmail) {
+        profileEmail.textContent = userProfile.email || '';
+    }
+    if (profileMemberSince) {
+        profileMemberSince.textContent = userProfile.createdAt
+            ? `Member since ${new Date(userProfile.createdAt).toLocaleDateString()}`
+            : '';
+    }
 }
 
 // Open profile modal
@@ -1145,6 +1205,7 @@ function openProfileModal() {
     
     // Display badges
     renderBadgesDisplay();
+    renderMilestones();
     
     document.getElementById('profileModal').classList.add('active');
 }
@@ -1174,12 +1235,39 @@ function renderBadgesDisplay() {
     document.getElementById('badgesDisplay').innerHTML = badgesHTML;
 }
 
+function renderMilestones() {
+    const milestonesContainer = document.getElementById('milestonesDisplay');
+    if (!milestonesContainer) return;
+
+    const milestones = Array.isArray(userProfile.milestones) ? userProfile.milestones : [];
+    if (milestones.length === 0) {
+        milestonesContainer.innerHTML = '<p class="milestone-empty">Your milestone history will appear here as you progress.</p>';
+        return;
+    }
+
+    milestonesContainer.innerHTML = milestones
+        .slice(0, 12)
+        .map(milestone => `
+            <div class="milestone-item">
+                <div class="milestone-copy">
+                    <strong>${milestone.title}</strong>
+                    <p>${milestone.description || ''}</p>
+                </div>
+                <span class="milestone-date">${new Date(milestone.createdAt).toLocaleDateString()}</span>
+            </div>
+        `)
+        .join('');
+}
+
 // Check and unlock new badges
 function checkNewBadges() {
-    const maxStreak = Math.max(
-        getChallengeStreak(challenges[0] || { completedDates: {} }),
-        ...workouts.map(w => getWorkoutStreak(w))
-    );
+    const maxChallengeStreak = challenges.length > 0
+        ? Math.max(...challenges.map(challenge => getChallengeStreak(challenge)))
+        : 0;
+    const maxWorkoutStreak = workouts.length > 0
+        ? Math.max(...workouts.map(workout => getWorkoutStreak(workout)))
+        : 0;
+    const maxStreak = Math.max(maxChallengeStreak, maxWorkoutStreak);
     
     Object.entries(BADGES).forEach(([id, badge]) => {
         if (userProfile.unlockedBadges.includes(id)) return; // Already unlocked
@@ -1187,6 +1275,7 @@ function checkNewBadges() {
         // Check badge condition
         if (badge.condition('any', maxStreak)) {
             userProfile.unlockedBadges.push(id);
+            recordMilestone('badge', `Unlocked badge "${badge.name}"`, badge.description, false);
             showBadgeUnlock(id, badge);
         }
     });
@@ -1194,14 +1283,17 @@ function checkNewBadges() {
     // Check points-based badges
     if (!userProfile.unlockedBadges.includes('first-points') && userProfile.points >= 100) {
         userProfile.unlockedBadges.push('first-points');
+        recordMilestone('badge', `Unlocked badge "${BADGES['first-points'].name}"`, BADGES['first-points'].description, false);
         showBadgeUnlock('first-points', BADGES['first-points']);
     }
     if (!userProfile.unlockedBadges.includes('point-collector') && userProfile.points >= 500) {
         userProfile.unlockedBadges.push('point-collector');
+        recordMilestone('badge', `Unlocked badge "${BADGES['point-collector'].name}"`, BADGES['point-collector'].description, false);
         showBadgeUnlock('point-collector', BADGES['point-collector']);
     }
     if (!userProfile.unlockedBadges.includes('wealth') && userProfile.points >= 1000) {
         userProfile.unlockedBadges.push('wealth');
+        recordMilestone('badge', `Unlocked badge "${BADGES['wealth'].name}"`, BADGES['wealth'].description, false);
         showBadgeUnlock('wealth', BADGES['wealth']);
     }
     
@@ -1218,6 +1310,7 @@ function buyShield() {
     if (userProfile.points >= 100) {
         userProfile.points -= 100;
         userProfile.shields += 1;
+        recordMilestone('shield', 'Bought a streak shield', '100 points exchanged for 1 shield.');
         saveProfile();
         updateProfileCard();
         openProfileModal(); // Refresh the modal

@@ -27,6 +27,7 @@
                     <input type="password" id="loginPassword" placeholder="••••••••" required>
                 </div>
                 <button class="btn-auth" onclick="loginUser()">Login</button>
+                <button class="btn-auth btn-google" onclick="loginWithGoogle()">Continue with Google</button>
                 <p class="auth-toggle">Don't have an account? <a onclick="showSignup()">Sign up</a></p>
                 <div id="loginError" class="auth-error"></div>
             </div>
@@ -51,6 +52,7 @@
                     <input type="password" id="signupConfirmPassword" placeholder="••••••••" required>
                 </div>
                 <button class="btn-auth" onclick="signupUser()">Create Account</button>
+                <button class="btn-auth btn-google" onclick="loginWithGoogle()">Sign up with Google</button>
                 <p class="auth-toggle">Already have an account? <a onclick="showLogin()">Login</a></p>
                 <div id="signupError" class="auth-error"></div>
             </div>
@@ -71,6 +73,10 @@
             <div class="profile-avatar" onclick="openProfileModal()">
                 <span id="avatarIcon" class="avatar-icon">🥚</span>
                 <span id="avatarRank" class="avatar-rank">Scout</span>
+            </div>
+            <div class="profile-identity">
+                <p id="profileName" class="profile-name">Athlete</p>
+                <p id="profileEmail" class="profile-email"></p>
             </div>
             <div class="profile-stats">
                 <div class="stat-item">
@@ -353,6 +359,7 @@
                         <span id="profileAvatarIcon" class="avatar-icon-large">🥚</span>
                     </div>
                     <div class="profile-title">
+                        <p id="profileMemberSince" class="profile-member-since"></p>
                         <h3 id="profileRankTitle">Scout</h3>
                         <p id="profileRankDescription">Just starting your journey...</p>
                     </div>
@@ -393,6 +400,12 @@
                             <!-- Badges will be displayed here -->
                         </div>
                     </div>
+                    <div class="profile-section">
+                        <h4>Milestones</h4>
+                        <div id="milestonesDisplay" class="milestones-list">
+                            <!-- Milestones will be displayed here -->
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Profile Actions -->
@@ -411,7 +424,7 @@
   // Import the functions you need from the SDKs you need
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
   import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
-  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 
   // Your web app's Firebase configuration
   const firebaseConfig = {
@@ -427,6 +440,7 @@
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
   const auth = getAuth(app);
+  const googleProvider = new GoogleAuthProvider();
 
   // Expose globally for use in index.js
   window.db = db;
@@ -445,9 +459,48 @@
     serverTimestamp,
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
+    signInWithPopup,
     signOut,
-    onAuthStateChanged
+    onAuthStateChanged,
+    GoogleAuthProvider
   };
+
+  async function ensureUserProfile(user, fallbackUsername = '') {
+    const { doc, getDoc, setDoc } = window.Firebase;
+    const userDocRef = doc(window.db, 'users', user.uid);
+    const existingDoc = await getDoc(userDocRef);
+
+    if (existingDoc.exists()) {
+      const currentData = existingDoc.data();
+      await setDoc(userDocRef, {
+        username: currentData.username || fallbackUsername || user.displayName || user.email?.split('@')[0] || 'Athlete',
+        email: currentData.email || user.email || '',
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      return;
+    }
+
+    await setDoc(userDocRef, {
+      username: fallbackUsername || user.displayName || user.email?.split('@')[0] || 'Athlete',
+      email: user.email || '',
+      points: 0,
+      shields: 0,
+      unlockedBadges: [],
+      milestones: [
+        {
+          id: `account-created-${Date.now()}`,
+          type: 'account-created',
+          title: 'Created your account',
+          description: 'Your personal sport profile is ready.',
+          createdAt: new Date().toISOString()
+        }
+      ],
+      challenges: [],
+      workouts: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+  }
 
   // Check authentication state on page load
   onAuthStateChanged(auth, (user) => {
@@ -468,6 +521,11 @@
       // User is not logged in
       authScreen.style.display = 'block';
       appContainer.style.display = 'none';
+      localStorage.removeItem('userEmail');
+      localStorage.removeItem('userId');
+      if (typeof cleanupOnLogout === 'function') {
+        cleanupOnLogout();
+      }
     }
   });
 
@@ -527,18 +585,7 @@
       const user = userCredential.user;
       
       // Create user profile in Firestore with initial stats
-      const { doc, setDoc } = window.Firebase;
-      const userDocRef = doc(window.db, 'users', user.uid);
-      await setDoc(userDocRef, {
-        username: username,
-        email: email,
-        points: 0,
-        shields: 0,
-        unlockedBadges: [],
-        challenges: [],
-        workouts: [],
-        createdAt: new Date().toISOString()
-      });
+      await ensureUserProfile(user, username);
       
       // Clear form
       document.getElementById('signupUsername').value = '';
@@ -547,6 +594,20 @@
       document.getElementById('signupConfirmPassword').value = '';
     } catch (error) {
       errorDiv.textContent = error.message;
+    }
+  };
+
+  window.loginWithGoogle = async function() {
+    const activeError = document.getElementById('loginForm').classList.contains('active')
+      ? document.getElementById('loginError')
+      : document.getElementById('signupError');
+    activeError.textContent = '';
+
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      await ensureUserProfile(result.user);
+    } catch (error) {
+      activeError.textContent = error.message;
     }
   };
 
