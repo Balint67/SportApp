@@ -434,7 +434,7 @@
   // Import the functions you need from the SDKs you need
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
   import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
-  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 
   // Your web app's Firebase configuration
   const firebaseConfig = {
@@ -471,17 +471,10 @@
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
     signInWithPopup,
-    signInWithRedirect,
-    getRedirectResult,
     signOut,
     onAuthStateChanged,
     GoogleAuthProvider
   };
-
-  function isMobileGoogleAuth() {
-    return window.matchMedia('(pointer: coarse)').matches
-      || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-  }
 
   async function ensureUserProfile(user, fallbackUsername = '') {
     const { doc, getDoc, setDoc } = window.Firebase;
@@ -525,19 +518,6 @@
       ? document.getElementById('loginError')
       : document.getElementById('signupError');
   }
-
-  async function finalizeRedirectLogin() {
-    try {
-      const result = await getRedirectResult(auth);
-      if (result?.user) {
-        await ensureUserProfile(result.user);
-      }
-    } catch (error) {
-      getActiveAuthErrorElement().textContent = error.message;
-    }
-  }
-
-  await finalizeRedirectLogin();
 
   // Check authentication state on page load
   onAuthStateChanged(auth, async (user) => {
@@ -644,11 +624,6 @@
     activeError.textContent = '';
 
     try {
-      if (isMobileGoogleAuth()) {
-        await signInWithRedirect(auth, googleProvider);
-        return;
-      }
-
       const result = await signInWithPopup(auth, googleProvider);
       await ensureUserProfile(result.user);
     } catch (error) {
