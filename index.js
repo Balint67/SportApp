@@ -55,6 +55,33 @@ let ghostModePerformance = {
     reps: ''
 };
 
+const CHALLENGE_SUGGESTIONS = [
+    { name: '100 Push-Ups a Day', details: 'Accumulate 100 push-ups daily in as many sets as needed.' },
+    { name: '20 Pull-Ups Mission', details: 'Hit 20 clean pull-ups every day with strict form.' },
+    { name: 'Plank Ladder', details: 'Hold a total of 5 minutes of planks each day.' },
+    { name: 'Squat Century', details: 'Complete 100 bodyweight squats before the day ends.' },
+    { name: '10k Steps Streak', details: 'Walk at least 10,000 steps every single day.' },
+    { name: 'Mobility Reset', details: 'Spend 15 minutes daily on hips, shoulders, and back mobility.' },
+    { name: 'Core Crusher', details: 'Do 3 rounds of 20 sit-ups, 20 leg raises, and a 60-second plank.' },
+    { name: 'Burpee Burner', details: 'Complete 50 burpees per day and track your streak.' },
+    { name: 'Jump Rope Daily', details: 'Hit 1,000 jump-rope skips every day.' },
+    { name: 'Lunge Line', details: 'Do 60 walking lunges a day, keeping each rep controlled.' }
+];
+
+const WORKOUT_SUGGESTIONS = [
+    { name: 'Personal Workout', details: 'Create your own workout style from scratch.', custom: true },
+    { name: 'Bodyweight Training', details: 'Customize with movements like push-ups, squats, lunges, planks, or burpees.' },
+    { name: 'Dumbbell Workout', details: 'Add your preferred dumbbell exercises, sets, reps, or muscle groups.' },
+    { name: 'Run', details: 'Pick a distance, pace goal, or time target later.' },
+    { name: 'Walk', details: 'Set a distance, step goal, or easy recovery duration.' },
+    { name: 'Cycling', details: 'Customize with distance, duration, or interval segments.' },
+    { name: 'Mobility Session', details: 'Focus on stretching, hips, shoulders, back, or full-body recovery.' },
+    { name: 'Core Workout', details: 'Build your own abs and core routine with time or rep targets.' },
+    { name: 'Upper Body Workout', details: 'Choose your exercises for chest, back, shoulders, and arms.' },
+    { name: 'Lower Body Workout', details: 'Customize a legs session with squats, lunges, hinges, or calf work.' },
+    { name: 'HIIT Session', details: 'Set work and rest intervals, then choose your favorite exercises.' }
+];
+
 // Firebase Integration Functions
 async function initializeAppForUser(user) {
     userId = user.uid;
@@ -196,6 +223,8 @@ document.addEventListener('DOMContentLoaded', () => {
     renderChallenges();
     renderWorkouts();
     updateProfileCard();
+    renderSuggestionOptions('challenge');
+    renderSuggestionOptions('workout');
 
     // Event delegation for challenge calendar days
     document.getElementById('challengesList').addEventListener('click', (e) => {
@@ -291,6 +320,57 @@ function saveProfile() {
     }
 }
 
+function getSuggestionsByType(type) {
+    return type === 'challenge' ? CHALLENGE_SUGGESTIONS : WORKOUT_SUGGESTIONS;
+}
+
+function renderSuggestionOptions(type) {
+    const container = document.getElementById(type === 'challenge' ? 'challengeSuggestions' : 'workoutSuggestions');
+    if (!container) return;
+
+    container.innerHTML = getSuggestionsByType(type)
+        .map((suggestion, index) => `
+            <button
+                type="button"
+                class="suggestion-chip${suggestion.custom ? ' suggestion-chip-custom' : ''}"
+                data-suggestion-type="${type}"
+                data-suggestion-index="${index}"
+                onclick="applySuggestion('${type}', ${index})"
+            >
+                ${suggestion.custom ? '<span class="suggestion-plus">+</span>' : ''}
+                <span class="suggestion-title">${suggestion.name}</span>
+                <span class="suggestion-text">${suggestion.details}</span>
+            </button>
+        `)
+        .join('');
+}
+
+function clearSuggestionSelection(type) {
+    document
+        .querySelectorAll(`.suggestion-chip[data-suggestion-type="${type}"]`)
+        .forEach(button => button.classList.remove('active'));
+}
+
+function applySuggestion(type, index) {
+    const suggestion = getSuggestionsByType(type)[index];
+    if (!suggestion) return;
+
+    if (type === 'challenge') {
+        document.getElementById('challengeName').value = suggestion.name;
+        document.getElementById('challengeDetails').value = suggestion.details;
+    } else {
+        document.getElementById('workoutName').value = suggestion.custom ? '' : suggestion.name;
+        document.getElementById('workoutDetails').value = suggestion.custom ? '' : suggestion.details;
+    }
+
+    clearSuggestionSelection(type);
+
+    const activeButton = document.querySelector(`.suggestion-chip[data-suggestion-type="${type}"][data-suggestion-index="${index}"]`);
+    if (activeButton) {
+        activeButton.classList.add('active');
+    }
+}
+
 // Create new challenge
 function createChallenge(event) {
     event.preventDefault();
@@ -317,6 +397,7 @@ function createChallenge(event) {
 
     // Reset form and close modal
     document.getElementById('createChallengeForm').reset();
+    clearSuggestionSelection('challenge');
     closeCreateModal('challenge');
 }
 
@@ -357,6 +438,7 @@ function createWorkout(event) {
     selectedDays = [];
     document.getElementById('createWorkoutForm').reset();
     document.querySelectorAll('.day-btn').forEach(btn => btn.classList.remove('selected'));
+    clearSuggestionSelection('workout');
     closeCreateModal('workout');
 }
 
@@ -674,10 +756,12 @@ function updateDayPickerUI() {
 // Modal functions
 function openCreateModal(type) {
     if (type === 'challenge') {
+        clearSuggestionSelection('challenge');
         document.getElementById('createChallengeModal').classList.add('active');
     } else if (type === 'workout') {
         selectedDays = [];
         updateDayPickerUI();
+        clearSuggestionSelection('workout');
         document.getElementById('createWorkoutModal').classList.add('active');
     }
 }

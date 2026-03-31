@@ -161,6 +161,11 @@
                     <input type="text" id="challengeDetails" placeholder="e.g., 20 chest to bar pull-ups">
                 </div>
                 <div class="form-group">
+                    <label>Suggestions</label>
+                    <div id="challengeSuggestions" class="suggestion-grid"></div>
+                    <p class="suggestion-help">Tap a suggestion to autofill, or type your own custom challenge.</p>
+                </div>
+                <div class="form-group">
                     <label for="challengeColor">Color</label>
                     <div class="color-picker">
                         <input type="radio" name="color" value="#FF6B6B" id="color1" checked>
@@ -220,6 +225,11 @@
                 <div class="form-group">
                     <label for="workoutDetails">Details</label>
                     <input type="text" id="workoutDetails" placeholder="e.g., 5km run">
+                </div>
+                <div class="form-group">
+                    <label>Suggestions</label>
+                    <div id="workoutSuggestions" class="suggestion-grid"></div>
+                    <p class="suggestion-help">Choose a simple workout type, or tap the + card to create your own workout style.</p>
                 </div>
                 <div class="form-group">
                     <label>Select Workout Days</label>
@@ -424,7 +434,7 @@
   // Import the functions you need from the SDKs you need
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
   import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
-  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 
   // Your web app's Firebase configuration
   const firebaseConfig = {
@@ -460,10 +470,16 @@
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
     signInWithPopup,
+    signInWithRedirect,
     signOut,
     onAuthStateChanged,
     GoogleAuthProvider
   };
+
+  function isMobileGoogleAuth() {
+    return window.matchMedia('(pointer: coarse)').matches
+      || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  }
 
   async function ensureUserProfile(user, fallbackUsername = '') {
     const { doc, getDoc, setDoc } = window.Firebase;
@@ -503,12 +519,13 @@
   }
 
   // Check authentication state on page load
-  onAuthStateChanged(auth, (user) => {
+  onAuthStateChanged(auth, async (user) => {
     const authScreen = document.getElementById('authScreen');
     const appContainer = document.getElementById('appContainer');
     
     if (user) {
       // User is logged in
+      await ensureUserProfile(user);
       authScreen.style.display = 'none';
       appContainer.style.display = 'block';
       localStorage.setItem('userEmail', user.email);
@@ -604,6 +621,11 @@
     activeError.textContent = '';
 
     try {
+      if (isMobileGoogleAuth()) {
+        await signInWithRedirect(auth, googleProvider);
+        return;
+      }
+
       const result = await signInWithPopup(auth, googleProvider);
       await ensureUserProfile(result.user);
     } catch (error) {
