@@ -434,7 +434,7 @@
   // Import the functions you need from the SDKs you need
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
   import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
-  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-auth.js";
 
   // Your web app's Firebase configuration
   const firebaseConfig = {
@@ -451,6 +451,7 @@
   const db = getFirestore(app);
   const auth = getAuth(app);
   const googleProvider = new GoogleAuthProvider();
+  await setPersistence(auth, browserLocalPersistence);
 
   // Expose globally for use in index.js
   window.db = db;
@@ -471,6 +472,7 @@
     signInWithEmailAndPassword,
     signInWithPopup,
     signInWithRedirect,
+    getRedirectResult,
     signOut,
     onAuthStateChanged,
     GoogleAuthProvider
@@ -518,6 +520,25 @@
     });
   }
 
+  function getActiveAuthErrorElement() {
+    return document.getElementById('loginForm').classList.contains('active')
+      ? document.getElementById('loginError')
+      : document.getElementById('signupError');
+  }
+
+  async function finalizeRedirectLogin() {
+    try {
+      const result = await getRedirectResult(auth);
+      if (result?.user) {
+        await ensureUserProfile(result.user);
+      }
+    } catch (error) {
+      getActiveAuthErrorElement().textContent = error.message;
+    }
+  }
+
+  await finalizeRedirectLogin();
+
   // Check authentication state on page load
   onAuthStateChanged(auth, async (user) => {
     const authScreen = document.getElementById('authScreen');
@@ -525,7 +546,11 @@
     
     if (user) {
       // User is logged in
-      await ensureUserProfile(user);
+      try {
+        await ensureUserProfile(user);
+      } catch (error) {
+        console.error('Profile sync error:', error);
+      }
       authScreen.style.display = 'none';
       appContainer.style.display = 'block';
       localStorage.setItem('userEmail', user.email);
@@ -615,9 +640,7 @@
   };
 
   window.loginWithGoogle = async function() {
-    const activeError = document.getElementById('loginForm').classList.contains('active')
-      ? document.getElementById('loginError')
-      : document.getElementById('signupError');
+    const activeError = getActiveAuthErrorElement();
     activeError.textContent = '';
 
     try {
