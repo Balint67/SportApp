@@ -98,29 +98,32 @@
         <!-- Navigation Tabs -->
         <div class="nav-tabs">
             <button class="nav-tab active" onclick="switchTab('challenges')">
-                🎯 Challenges
+                🎯 Goals
             </button>
             <button class="nav-tab" onclick="switchTab('workouts')">
                 🏋️ Workouts
             </button>
+            <button class="nav-tab" onclick="switchTab('leaderboard')">
+                🏆 Leaderboard
+            </button>
         </div>
 
-        <!-- Challenges Tab -->
+        <!-- Goals Tab -->
         <div id="challengesTab" class="tab-content active">
-            <!-- Add New Challenge Button -->
+            <!-- Add New Goal Button -->
             <button class="btn-add-challenge" onclick="openCreateModal('challenge')">
-                + New Challenge
+                + New Goal
             </button>
 
-            <!-- Challenges List -->
+            <!-- Goals List -->
             <div id="challengesList" class="challenges-list">
-                <!-- Challenges will be dynamically inserted here -->
+                <!-- Goals will be dynamically inserted here -->
             </div>
 
             <!-- Empty State -->
             <div id="emptyChallengesState" class="empty-state">
-                <p>📋 No challenges yet</p>
-                <p class="empty-subtitle">Create your first challenge to get started!</p>
+                <p>📋 No goals yet</p>
+                <p class="empty-subtitle">Create your first goal to start building daily habits.</p>
             </div>
         </div>
 
@@ -142,28 +145,52 @@
                 <p class="empty-subtitle">Create your first workout to get started!</p>
             </div>
         </div>
+
+        <div id="leaderboardTab" class="tab-content">
+            <div class="leaderboard-panel">
+                <div class="leaderboard-header">
+                    <div>
+                        <h2>Global Leaderboard</h2>
+                        <p>See how every athlete stacks up.</p>
+                    </div>
+                    <button class="btn-refresh-leaderboard" onclick="loadLeaderboard()">Refresh</button>
+                </div>
+
+                <div id="leaderboardList" class="leaderboard-list"></div>
+
+                <div id="leaderboardEmptyState" class="empty-state" style="display: none;">
+                    <p>🏆 No athletes found yet</p>
+                    <p class="empty-subtitle">Once more people join, the leaderboard will appear here.</p>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <!-- Create Challenge Modal -->
+    <!-- Create Goal Modal -->
     <div id="createChallengeModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>New Challenge</h2>
+                <h2>New Goal</h2>
                 <button class="close-btn" onclick="closeCreateModal('challenge')">&times;</button>
             </div>
             <form id="createChallengeForm" onsubmit="createChallenge(event)">
                 <div class="form-group">
-                    <label for="challengeName">Challenge Name</label>
-                    <input type="text" id="challengeName" placeholder="e.g., Pull-ups" required>
+                    <label for="challengeCategory">Goal Category</label>
+                    <div id="challengeCategoryOptions" class="category-picker"></div>
+                    <p class="suggestion-help">Choose a category first, then use a recommendation or type your own goal.</p>
+                </div>
+                <div class="form-group">
+                    <label for="challengeName">Goal Name</label>
+                    <input type="text" id="challengeName" placeholder="e.g., Read every day" required>
                 </div>
                 <div class="form-group">
                     <label for="challengeDetails">Details</label>
-                    <input type="text" id="challengeDetails" placeholder="e.g., 20 chest to bar pull-ups">
+                    <input type="text" id="challengeDetails" placeholder="e.g., Read 20 pages before bed">
                 </div>
                 <div class="form-group">
-                    <label>Suggestions</label>
+                    <label>Recommended Goals</label>
                     <div id="challengeSuggestions" class="suggestion-grid"></div>
-                    <p class="suggestion-help">Tap a suggestion to autofill, or type your own custom challenge.</p>
+                    <p class="suggestion-help">Every category includes starter ideas, but you can always add your own custom goal.</p>
                 </div>
                 <div class="form-group">
                     <label for="challengeColor">Color</label>
@@ -205,7 +232,7 @@
                         <label for="color12" style="background-color: #1ABC9C;"></label>
                     </div>
                 </div>
-                <button type="submit" class="btn-submit">Create Challenge</button>
+                <button type="submit" class="btn-submit">Create Goal</button>
             </form>
         </div>
     </div>
@@ -403,6 +430,13 @@
                         </div>
                     </div>
 
+                    <div class="profile-section">
+                        <h4>Your Streaks</h4>
+                        <div id="profileStreaksDisplay" class="profile-streaks">
+                            <!-- Individual challenge and workout streaks will be displayed here -->
+                        </div>
+                    </div>
+
                     <!-- Badges Section -->
                     <div class="profile-section">
                         <h4>🏆 Achievement Badges</h4>
@@ -424,6 +458,29 @@
                     <button class="btn-logout" onclick="logoutUser()">🚪 Logout</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div id="streakFireModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Streak Fire Styles</h2>
+                <button class="close-btn" onclick="closeStreakFireModal()">&times;</button>
+            </div>
+            <div class="streak-fire-modal-copy">
+                <p id="streakFireModalSummary" class="progress-text"></p>
+            </div>
+            <div id="streakFireTiers" class="streak-fire-tier-list"></div>
+        </div>
+    </div>
+
+    <div id="leaderboardUserModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Athlete Profile</h2>
+                <button class="close-btn" onclick="closeLeaderboardUserModal()">&times;</button>
+            </div>
+            <div id="leaderboardUserProfile" class="leaderboard-user-profile"></div>
         </div>
     </div>
     </div>

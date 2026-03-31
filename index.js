@@ -41,8 +41,11 @@ let challenges = [];
 let workouts = [];
 let selectedDays = []; // For day picker in modal
 let userProfile = getDefaultProfile();
+let streakIconIdCounter = 0;
 let userId = null;
 let useFirestore = false;
+let activeStreakFireValue = 0;
+let leaderboardUsers = [];
 
 // Ghost Mode Variables
 let ghostModeWorkout = null;
@@ -55,18 +58,43 @@ let ghostModePerformance = {
     reps: ''
 };
 
-const CHALLENGE_SUGGESTIONS = [
-    { name: '100 Push-Ups a Day', details: 'Accumulate 100 push-ups daily in as many sets as needed.' },
-    { name: '20 Pull-Ups Mission', details: 'Hit 20 clean pull-ups every day with strict form.' },
-    { name: 'Plank Ladder', details: 'Hold a total of 5 minutes of planks each day.' },
-    { name: 'Squat Century', details: 'Complete 100 bodyweight squats before the day ends.' },
-    { name: '10k Steps Streak', details: 'Walk at least 10,000 steps every single day.' },
-    { name: 'Mobility Reset', details: 'Spend 15 minutes daily on hips, shoulders, and back mobility.' },
-    { name: 'Core Crusher', details: 'Do 3 rounds of 20 sit-ups, 20 leg raises, and a 60-second plank.' },
-    { name: 'Burpee Burner', details: 'Complete 50 burpees per day and track your streak.' },
-    { name: 'Jump Rope Daily', details: 'Hit 1,000 jump-rope skips every day.' },
-    { name: 'Lunge Line', details: 'Do 60 walking lunges a day, keeping each rep controlled.' }
+const GOAL_CATEGORIES = [
+    { id: 'sports', label: 'Sports' },
+    { id: 'health', label: 'Health' },
+    { id: 'personal-life', label: 'Personal Life' },
+    { id: 'self-improvement', label: 'Self Improvement' }
 ];
+
+const GOAL_SUGGESTIONS = {
+    sports: [
+        { name: '100 Push-Ups a Day', details: 'Accumulate 100 push-ups daily in as many sets as needed.' },
+        { name: '10k Steps Streak', details: 'Walk at least 10,000 steps every single day.' },
+        { name: 'Jump Rope Daily', details: 'Hit 1,000 jump-rope skips every day.' },
+        { name: 'Mobility Reset', details: 'Spend 15 minutes daily on hips, shoulders, and back mobility.' },
+        { name: 'Custom Sports Goal', details: 'Create your own sport or movement habit.', custom: true }
+    ],
+    health: [
+        { name: 'Drink 2L of Water', details: 'Finish at least 2 liters of water every day.' },
+        { name: 'Healthy Meal Check-In', details: 'Track one clean, balanced meal each day.' },
+        { name: 'Sleep 8 Hours', details: 'Aim for at least 8 hours of sleep every night.' },
+        { name: 'Vitamins Daily', details: 'Take your supplements or vitamins every day.' },
+        { name: 'Custom Health Goal', details: 'Create your own health and wellness habit.', custom: true }
+    ],
+    'personal-life': [
+        { name: 'Call Family', details: 'Reach out to a family member or close friend every day.' },
+        { name: 'Tidy Your Space', details: 'Spend 10 minutes cleaning or organizing your room.' },
+        { name: 'Budget Check', details: 'Review your spending or savings progress each day.' },
+        { name: 'Daily Journal', details: 'Write a short personal reflection before the day ends.' },
+        { name: 'Custom Personal Goal', details: 'Create your own personal life routine.', custom: true }
+    ],
+    'self-improvement': [
+        { name: 'Read Every Day', details: 'Read at least 20 pages or 15 minutes every day.' },
+        { name: 'Study Session', details: 'Complete one focused study block daily.' },
+        { name: 'Learn a Language', details: 'Practice vocabulary, listening, or speaking every day.' },
+        { name: 'Skill Builder', details: 'Work on coding, music, design, or another skill daily.' },
+        { name: 'Custom Self Improvement Goal', details: 'Create your own growth habit.', custom: true }
+    ]
+};
 
 const WORKOUT_SUGGESTIONS = [
     { name: 'Personal Workout', details: 'Create your own workout style from scratch.', custom: true },
@@ -81,6 +109,7 @@ const WORKOUT_SUGGESTIONS = [
     { name: 'Lower Body Workout', details: 'Customize a legs session with squats, lunges, hinges, or calf work.' },
     { name: 'HIIT Session', details: 'Set work and rest intervals, then choose your favorite exercises.' }
 ];
+let selectedGoalCategory = GOAL_CATEGORIES[0].id;
 
 // Firebase Integration Functions
 async function initializeAppForUser(user) {
@@ -104,6 +133,7 @@ async function initializeAppForUser(user) {
     renderChallenges();
     renderWorkouts();
     updateProfileCard();
+    await loadLeaderboard();
 }
 
 function cleanupOnLogout() {
@@ -114,10 +144,12 @@ function cleanupOnLogout() {
     workouts = [];
     selectedDays = [];
     userProfile = getDefaultProfile();
+    leaderboardUsers = [];
     localStorage.removeItem(STORAGE_AUTH_USER_KEY);
     updateProfileCard();
     renderChallenges();
     renderWorkouts();
+    renderLeaderboard();
 }
 
 async function loadProfileFromFirestore() {
@@ -156,6 +188,7 @@ async function saveProfileToFirestore() {
         const { doc, setDoc } = window.Firebase;
         const userDocRef = doc(window.db, 'users', userId);
         await setDoc(userDocRef, userProfile, { merge: true });
+        loadLeaderboard().catch(error => console.error('Error refreshing leaderboard:', error));
     } catch (error) {
         console.error('Error saving profile to Firestore:', error);
     }
@@ -199,6 +232,7 @@ async function saveChallengesToFirestore() {
         const { doc, setDoc } = window.Firebase;
         const userDocRef = doc(window.db, 'users', userId);
         await setDoc(userDocRef, { challenges }, { merge: true });
+        loadLeaderboard().catch(error => console.error('Error refreshing leaderboard:', error));
     } catch (error) {
         console.error('Error saving challenges to Firestore:', error);
     }
@@ -210,6 +244,7 @@ async function saveWorkoutsToFirestore() {
         const { doc, setDoc } = window.Firebase;
         const userDocRef = doc(window.db, 'users', userId);
         await setDoc(userDocRef, { workouts }, { merge: true });
+        loadLeaderboard().catch(error => console.error('Error refreshing leaderboard:', error));
     } catch (error) {
         console.error('Error saving workouts to Firestore:', error);
     }
@@ -223,8 +258,10 @@ document.addEventListener('DOMContentLoaded', () => {
     renderChallenges();
     renderWorkouts();
     updateProfileCard();
+    renderGoalCategoryOptions();
     renderSuggestionOptions('challenge');
     renderSuggestionOptions('workout');
+    renderLeaderboard();
 
     // Event delegation for challenge calendar days
     document.getElementById('challengesList').addEventListener('click', (e) => {
@@ -321,7 +358,48 @@ function saveProfile() {
 }
 
 function getSuggestionsByType(type) {
-    return type === 'challenge' ? CHALLENGE_SUGGESTIONS : WORKOUT_SUGGESTIONS;
+    if (type === 'challenge') {
+        return GOAL_SUGGESTIONS[selectedGoalCategory] || [];
+    }
+    return WORKOUT_SUGGESTIONS;
+}
+
+const POINT_BADGE_IDS = [
+    'first-points',
+    'point-collector',
+    'wealth',
+    'point-overlord',
+    'point-emperor',
+    'point-celestial'
+];
+
+function getGoalCategoryLabel(categoryId) {
+    const category = GOAL_CATEGORIES.find(option => option.id === categoryId);
+    return category ? category.label : 'General';
+}
+
+function renderGoalCategoryOptions() {
+    const container = document.getElementById('challengeCategoryOptions');
+    if (!container) return;
+
+    container.innerHTML = GOAL_CATEGORIES.map(category => `
+        <button
+            type="button"
+            class="category-chip${category.id === selectedGoalCategory ? ' active' : ''}"
+            onclick="selectGoalCategory('${category.id}')"
+        >
+            ${category.label}
+        </button>
+    `).join('');
+}
+
+function selectGoalCategory(categoryId) {
+    selectedGoalCategory = categoryId;
+    renderGoalCategoryOptions();
+    renderSuggestionOptions('challenge');
+    clearSuggestionSelection('challenge');
+    document.getElementById('challengeName').value = '';
+    document.getElementById('challengeDetails').value = '';
 }
 
 function renderSuggestionOptions(type) {
@@ -356,8 +434,8 @@ function applySuggestion(type, index) {
     if (!suggestion) return;
 
     if (type === 'challenge') {
-        document.getElementById('challengeName').value = suggestion.name;
-        document.getElementById('challengeDetails').value = suggestion.details;
+        document.getElementById('challengeName').value = suggestion.custom ? '' : suggestion.name;
+        document.getElementById('challengeDetails').value = suggestion.custom ? '' : suggestion.details;
     } else {
         document.getElementById('workoutName').value = suggestion.custom ? '' : suggestion.name;
         document.getElementById('workoutDetails').value = suggestion.custom ? '' : suggestion.details;
@@ -385,18 +463,22 @@ function createChallenge(event) {
         id: Date.now(),
         name,
         details,
+        category: selectedGoalCategory,
         color,
         createdDate: new Date().toISOString(),
         completedDates: {}
     };
 
     challenges.push(challenge);
-    recordMilestone('challenge-created', `Created challenge "${name}"`, details || 'A new challenge is ready to track.');
+    recordMilestone('challenge-created', `Created goal "${name}"`, `${getGoalCategoryLabel(selectedGoalCategory)} goal${details ? `: ${details}` : ' is ready to track.'}`);
     saveChallenges();
     renderChallenges();
 
     // Reset form and close modal
+    selectedGoalCategory = GOAL_CATEGORIES[0].id;
     document.getElementById('createChallengeForm').reset();
+    renderGoalCategoryOptions();
+    renderSuggestionOptions('challenge');
     clearSuggestionSelection('challenge');
     closeCreateModal('challenge');
 }
@@ -444,7 +526,7 @@ function createWorkout(event) {
 
 // Delete challenge
 function deleteChallenge(id) {
-    if (confirm('Delete this challenge?')) {
+    if (confirm('Delete this goal?')) {
         challenges = challenges.filter(c => c.id !== id);
         saveChallenges();
         renderChallenges();
@@ -472,7 +554,7 @@ function toggleChallengeDay(challengeId, dateStr) {
             const streak = getChallengeStreak(challenge);
             const points = calculatePoints('challenge', streak);
             addPoints(points);
-            recordMilestone('challenge-complete', `Completed "${challenge.name}"`, `${dateStr} completion saved with a ${streak}-day streak.`);
+            recordMilestone('challenge-complete', `Completed goal "${challenge.name}"`, `${dateStr} completion saved with a ${streak}-day streak.`);
         }
         saveChallenges();
         renderChallenges();
@@ -544,6 +626,137 @@ function getWorkoutStreak(workout) {
     return streak;
 }
 
+function getEarliestCompletedDate(completedDates) {
+    const completedKeys = Object.keys(completedDates || {}).sort();
+    return completedKeys.length > 0 ? completedKeys[0] : null;
+}
+
+function getChallengeBestStreak(challenge) {
+    const earliestDate = getEarliestCompletedDate(challenge.completedDates);
+    if (!earliestDate) return 0;
+
+    let bestStreak = 0;
+    let currentStreak = 0;
+    let currentDate = new Date(`${earliestDate}T00:00:00`);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    while (currentDate <= today) {
+        const dateStr = getDateString(currentDate);
+        if (challenge.completedDates[dateStr]) {
+            currentStreak++;
+            bestStreak = Math.max(bestStreak, currentStreak);
+        } else {
+            currentStreak = 0;
+        }
+
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return bestStreak;
+}
+
+function getWorkoutBestStreak(workout) {
+    const earliestDate = getEarliestCompletedDate(workout.completedDates);
+    if (!earliestDate || !Array.isArray(workout.selectedDays) || workout.selectedDays.length === 0) {
+        return 0;
+    }
+
+    let bestStreak = 0;
+    let currentStreak = 0;
+    let currentDate = new Date(`${earliestDate}T00:00:00`);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    while (currentDate <= today) {
+        const dayOfWeek = currentDate.getDay();
+        if (workout.selectedDays.includes(dayOfWeek)) {
+            const dateStr = getDateString(currentDate);
+            if (workout.completedDates[dateStr]) {
+                currentStreak++;
+                bestStreak = Math.max(bestStreak, currentStreak);
+            } else {
+                currentStreak = 0;
+            }
+        }
+
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return bestStreak;
+}
+
+function getStreakVisualTier(streak) {
+    if (streak >= 1000) return { key: 'abyss', label: 'Abyssal fire' };
+    if (streak >= 500) return { key: 'venom', label: 'Venom fire' };
+    if (streak >= 100) return { key: 'frost', label: 'Frost fire' };
+    if (streak >= 50) return { key: 'arcane', label: 'Arcane fire' };
+    return { key: 'ember', label: 'Ember fire' };
+}
+
+function getStreakFireTiers() {
+    return [
+        { min: 10, key: 'ember', name: 'Ember Fire', description: 'Basic orange fire. Your streak is warming up.' },
+        { min: 50, key: 'arcane', name: 'Arcane Fire', description: 'Purple energy starts taking over the flame.' },
+        { min: 100, key: 'frost', name: 'Frost Fire', description: 'Blue fire for serious streak momentum.' },
+        { min: 500, key: 'venom', name: 'Venom Fire', description: 'Green fire for a monster long streak.' },
+        { min: 1000, key: 'abyss', name: 'Abyss Fire', description: 'Black evil fire for a brutal all-time streak.' }
+    ];
+}
+
+function renderStreakFireButton(streak) {
+    return `
+        <button
+            type="button"
+            class="streak-fire-button"
+            onclick="openStreakFireModal(${streak})"
+            aria-label="Show streak fire styles for ${streak} streak"
+        >
+            ${renderStreakIcon(streak)}
+        </button>
+    `;
+}
+
+function renderStreakIcon(streak) {
+    const tier = getStreakVisualTier(streak);
+    streakIconIdCounter += 1;
+    const filterId = `streakGlow-${tier.key}-${streakIconIdCounter}`;
+
+    const palettes = {
+        ember: { outer: '#ff9a3c', mid: '#ff6b2c', core: '#ffd166', glow: 'rgba(255, 140, 66, 0.35)' },
+        arcane: { outer: '#c86bff', mid: '#8e44ad', core: '#f1c0ff', glow: 'rgba(155, 89, 182, 0.35)' },
+        frost: { outer: '#64c8ff', mid: '#2d98da', core: '#dff6ff', glow: 'rgba(52, 152, 219, 0.35)' },
+        venom: { outer: '#5df29d', mid: '#27ae60', core: '#d8ffe8', glow: 'rgba(46, 204, 113, 0.35)' },
+        abyss: { outer: '#1a1a1a', mid: '#050505', core: '#ff3b30', glow: 'rgba(0, 0, 0, 0.55)' }
+    };
+
+    const palette = palettes[tier.key];
+    const coreShape = tier.key === 'abyss'
+        ? '<path d="M24 22 C19 18, 20 12, 24 8 C28 12, 29 18, 24 22 Z" fill="#ff3b30" opacity="0.95"/>'
+        : `<path d="M25 25 C22 21, 22 17, 25 13 C28 17, 28 21, 25 25 Z" fill="${palette.core}" opacity="0.9"/>`;
+    const evilMarks = tier.key === 'abyss'
+        ? '<path d="M21 28 L19 24 L22 24 Z M27 28 L26 24 L29 24 Z" fill="#ff6b6b"/>'
+        : '';
+
+    return `
+        <span class="streak-fire-icon streak-fire-${tier.key}" title="${tier.label}">
+            <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+                <defs>
+                    <filter id="${filterId}">
+                        <feDropShadow dx="0" dy="0" stdDeviation="${tier.key === 'abyss' ? '3.5' : '2.5'}" flood-color="${palette.glow}"/>
+                    </filter>
+                </defs>
+                <g filter="url(#${filterId})">
+                    <path d="M24 4 C18 10, 14 15, 14 23 C14 33, 18 41, 24 44 C30 41, 34 33, 34 24 C34 16, 30 9, 24 4 Z" fill="${palette.outer}"/>
+                    <path d="M24 9 C19 14, 18 18, 18 24 C18 31, 21 36, 24 39 C27 36, 30 31, 30 24 C30 18, 28 14, 24 9 Z" fill="${palette.mid}"/>
+                    ${coreShape}
+                    ${evilMarks}
+                </g>
+            </svg>
+        </span>
+    `;
+}
+
 // Get date string (YYYY-MM-DD)
 function getDateString(date) {
     const year = date.getFullYear();
@@ -613,14 +826,16 @@ function renderChallenges() {
             <div class="challenge-header">
                 <div class="challenge-title">
                     <h3>${challenge.name}</h3>
+                    <p class="goal-category-badge">${getGoalCategoryLabel(challenge.category)}</p>
                     <p class="challenge-details">${challenge.details}</p>
                 </div>
                 <button class="btn-delete" data-id="${challenge.id}" onclick="deleteChallenge(${challenge.id})">🗑️</button>
             </div>
 
             <div class="streak-container">
+                ${renderStreakFireButton(getChallengeStreak(challenge))}
                 <span class="streak-count">${getChallengeStreak(challenge)}</span>
-                <span class="streak-label">day streak 🔥</span>
+                <span class="streak-label">day streak</span>
             </div>
 
             ${renderCalendar(challenge, 'challenge')}
@@ -655,8 +870,9 @@ function renderWorkouts() {
             </div>
 
             <div class="streak-container">
+                ${renderStreakFireButton(getWorkoutStreak(workout))}
                 <span class="streak-count">${getWorkoutStreak(workout)}</span>
-                <span class="streak-label">streak 🔥</span>
+                <span class="streak-label">streak</span>
             </div>
 
             <button class="start-workout-btn" onclick="startGhostMode(${workout.id})">👻 Start Workout</button>
@@ -756,6 +972,9 @@ function updateDayPickerUI() {
 // Modal functions
 function openCreateModal(type) {
     if (type === 'challenge') {
+        selectedGoalCategory = GOAL_CATEGORIES[0].id;
+        renderGoalCategoryOptions();
+        renderSuggestionOptions('challenge');
         clearSuggestionSelection('challenge');
         document.getElementById('createChallengeModal').classList.add('active');
     } else if (type === 'workout') {
@@ -780,12 +999,24 @@ function setupModalHandlers() {
     document.addEventListener('click', (e) => {
         const challengeModal = document.getElementById('createChallengeModal');
         const workoutModal = document.getElementById('createWorkoutModal');
+        const profileModal = document.getElementById('profileModal');
+        const streakFireModal = document.getElementById('streakFireModal');
+        const leaderboardUserModal = document.getElementById('leaderboardUserModal');
 
         if (e.target === challengeModal) {
             closeCreateModal('challenge');
         }
         if (e.target === workoutModal) {
             closeCreateModal('workout');
+        }
+        if (e.target === profileModal) {
+            closeProfileModal();
+        }
+        if (e.target === streakFireModal) {
+            closeStreakFireModal();
+        }
+        if (e.target === leaderboardUserModal) {
+            closeLeaderboardUserModal();
         }
     });
 
@@ -794,6 +1025,9 @@ function setupModalHandlers() {
         if (e.key === 'Escape') {
             closeCreateModal('challenge');
             closeCreateModal('workout');
+            closeProfileModal();
+            closeStreakFireModal();
+            closeLeaderboardUserModal();
         }
     });
 }
@@ -815,7 +1049,218 @@ function switchTab(tab) {
     } else if (tab === 'workouts') {
         document.getElementById('workoutsTab').classList.add('active');
         document.querySelector('[onclick="switchTab(\'workouts\')"]').classList.add('active');
+    } else if (tab === 'leaderboard') {
+        document.getElementById('leaderboardTab').classList.add('active');
+        document.querySelector('[onclick="switchTab(\'leaderboard\')"]').classList.add('active');
+        loadLeaderboard().catch(error => console.error('Error loading leaderboard:', error));
     }
+}
+
+function getUserMaxChallengeStreak(userChallenges = []) {
+    return userChallenges.length > 0
+        ? Math.max(...userChallenges.map(challenge => getChallengeStreak(challenge)))
+        : 0;
+}
+
+function getUserMaxWorkoutStreak(userWorkouts = []) {
+    return userWorkouts.length > 0
+        ? Math.max(...userWorkouts.map(workout => getWorkoutStreak(workout)))
+        : 0;
+}
+
+function getLeaderboardEntryFromDoc(docSnap) {
+    const data = docSnap.data();
+    const docChallenges = Array.isArray(data.challenges)
+        ? data.challenges.map(challenge => ({
+            ...challenge,
+            completedDates: challenge && typeof challenge.completedDates === 'object' ? challenge.completedDates : {}
+        }))
+        : [];
+    const docWorkouts = Array.isArray(data.workouts)
+        ? data.workouts.map(workout => ({
+            ...workout,
+            completedDates: workout && typeof workout.completedDates === 'object' ? workout.completedDates : {},
+            selectedDays: Array.isArray(workout?.selectedDays) ? workout.selectedDays : []
+        }))
+        : [];
+    const badgeCount = Array.isArray(data.unlockedBadges) ? data.unlockedBadges.length : 0;
+    const bestStreak = Math.max(
+        getUserMaxChallengeStreak(docChallenges),
+        getUserMaxWorkoutStreak(docWorkouts)
+    );
+    const points = Number(data.points || 0);
+
+    return {
+        id: docSnap.id,
+        username: data.username || data.email?.split('@')[0] || 'Athlete',
+        email: data.email || '',
+        points,
+        shields: Number(data.shields || 0),
+        unlockedBadges: Array.isArray(data.unlockedBadges) ? data.unlockedBadges : [],
+        badgeCount,
+        challengeCount: docChallenges.length,
+        workoutCount: docWorkouts.length,
+        bestStreak,
+        createdAt: data.createdAt || '',
+        rankTitle: getAvatarStage(points).name
+    };
+}
+
+async function loadLeaderboard() {
+    const leaderboardList = document.getElementById('leaderboardList');
+    if (leaderboardList) {
+        leaderboardList.innerHTML = '<div class="empty-state"><p>Loading leaderboard...</p></div>';
+    }
+
+    if (!useFirestore || !window.db) {
+        leaderboardUsers = [];
+        renderLeaderboard();
+        return;
+    }
+
+    try {
+        const { collection, getDocs } = window.Firebase;
+        const snapshot = await getDocs(collection(window.db, 'users'));
+        leaderboardUsers = snapshot.docs
+            .map(getLeaderboardEntryFromDoc)
+            .sort((a, b) => {
+                if (b.points !== a.points) return b.points - a.points;
+                if (b.bestStreak !== a.bestStreak) return b.bestStreak - a.bestStreak;
+                return a.username.localeCompare(b.username);
+            });
+        renderLeaderboard();
+    } catch (error) {
+        console.error('Error loading leaderboard:', error);
+        if (leaderboardList) {
+            leaderboardList.innerHTML = '<div class="empty-state"><p>Unable to load leaderboard right now.</p></div>';
+        }
+    }
+}
+
+function renderLeaderboard() {
+    const leaderboardList = document.getElementById('leaderboardList');
+    const emptyState = document.getElementById('leaderboardEmptyState');
+    if (!leaderboardList || !emptyState) return;
+
+    if (leaderboardUsers.length === 0) {
+        leaderboardList.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+    }
+
+    emptyState.style.display = 'none';
+    leaderboardList.innerHTML = leaderboardUsers.map((athlete, index) => `
+        <button
+            type="button"
+            class="leaderboard-card ${athlete.id === userId ? 'current-user' : ''}"
+            onclick="openLeaderboardUserModal('${athlete.id}')"
+        >
+            <div class="leaderboard-rank ${index < 3 ? 'top-three' : ''}">#${index + 1}</div>
+            <div class="leaderboard-main">
+                <div class="leaderboard-name-row">
+                    <span class="leaderboard-name">${athlete.username}</span>
+                    ${athlete.id === userId ? '<span class="leaderboard-you">You</span>' : ''}
+                </div>
+                <p class="leaderboard-rank-title">${athlete.rankTitle}</p>
+                <div class="leaderboard-metrics">
+                    <span class="leaderboard-metric">${athlete.badgeCount} badges</span>
+                    <span class="leaderboard-metric">${athlete.challengeCount} challenges</span>
+                    <span class="leaderboard-metric">${athlete.workoutCount} workouts</span>
+                    <span class="leaderboard-metric">${athlete.bestStreak} best streak</span>
+                </div>
+            </div>
+            <div class="leaderboard-score">
+                <span class="leaderboard-score-value">${athlete.points}</span>
+                <span class="leaderboard-score-label">Points</span>
+            </div>
+        </button>
+    `).join('');
+}
+
+function openLeaderboardUserModal(userEntryId) {
+    const athlete = leaderboardUsers.find(entry => entry.id === userEntryId);
+    if (!athlete) return;
+
+    const profileContainer = document.getElementById('leaderboardUserProfile');
+    if (!profileContainer) return;
+
+    const joinedText = athlete.createdAt
+        ? new Date(athlete.createdAt).toLocaleDateString()
+        : 'Unknown';
+    const highestPointsBadge = getHighestUnlockedPointsBadge(athlete.unlockedBadges);
+
+    profileContainer.innerHTML = `
+        <div class="leaderboard-user-top">
+            <div class="leaderboard-user-avatar">${getAvatarStage(athlete.points).icon}</div>
+            <div class="leaderboard-user-copy">
+                <h3>${athlete.username}</h3>
+                <p>${athlete.rankTitle}</p>
+                <p>Joined ${joinedText}</p>
+            </div>
+        </div>
+        <div class="leaderboard-user-highlights">
+            <div class="leaderboard-highlight-card">
+                <div class="leaderboard-highlight-icon">
+                    ${renderStreakIcon(athlete.bestStreak)}
+                </div>
+                <div class="leaderboard-highlight-copy">
+                    <strong>Best Streak Fire</strong>
+                    <span>${athlete.bestStreak} streak</span>
+                </div>
+            </div>
+            <div class="leaderboard-highlight-card">
+                <div class="leaderboard-highlight-badge ${highestPointsBadge ? 'earned' : 'empty'}">
+                    ${highestPointsBadge ? highestPointsBadge.icon : '•'}
+                </div>
+                <div class="leaderboard-highlight-copy">
+                    <strong>Top Points Badge</strong>
+                    <span>${highestPointsBadge ? highestPointsBadge.name : 'No points badge earned yet'}</span>
+                </div>
+            </div>
+        </div>
+        <div class="leaderboard-user-grid">
+            <div class="leaderboard-user-stat">
+                <strong>${athlete.points}</strong>
+                <span>Total points</span>
+            </div>
+            <div class="leaderboard-user-stat">
+                <strong>${athlete.bestStreak}</strong>
+                <span>Best streak</span>
+            </div>
+            <div class="leaderboard-user-stat">
+                <strong>${athlete.badgeCount}</strong>
+                <span>Badges earned</span>
+            </div>
+            <div class="leaderboard-user-stat">
+                <strong>${athlete.shields}</strong>
+                <span>Shields saved</span>
+            </div>
+            <div class="leaderboard-user-stat">
+                <strong>${athlete.challengeCount}</strong>
+                <span>Challenges tracked</span>
+            </div>
+            <div class="leaderboard-user-stat">
+                <strong>${athlete.workoutCount}</strong>
+                <span>Workouts tracked</span>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('leaderboardUserModal').classList.add('active');
+}
+
+function closeLeaderboardUserModal() {
+    document.getElementById('leaderboardUserModal').classList.remove('active');
+}
+
+function getHighestUnlockedPointsBadge(unlockedBadges = []) {
+    const unlockedPointBadges = POINT_BADGE_IDS
+        .map(id => ({ id, badge: BADGES[id] }))
+        .filter(entry => entry.badge && unlockedBadges.includes(entry.id));
+
+    return unlockedPointBadges.length > 0
+        ? unlockedPointBadges[unlockedPointBadges.length - 1].badge
+        : null;
 }
 
 // ============================================
@@ -1177,6 +1622,27 @@ const BADGES = {
         description: 'Earn 1000 points',
         condition: (type, points) => points >= 1000 && type === 'points',
         rarity: 'rare'
+    },
+    'point-overlord': {
+        name: 'Overlord Core',
+        icon: '💠',
+        description: 'Earn 2000 points',
+        condition: (type, points) => points >= 2000 && type === 'points',
+        rarity: 'epic'
+    },
+    'point-emperor': {
+        name: 'Solar Crown',
+        icon: '👑',
+        description: 'Earn 5000 points',
+        condition: (type, points) => points >= 5000 && type === 'points',
+        rarity: 'legendary'
+    },
+    'point-celestial': {
+        name: 'Void Monarch',
+        icon: '🌌',
+        description: 'Earn 10000 points',
+        condition: (type, points) => points >= 10000 && type === 'points',
+        rarity: 'mythic'
     }
 };
 
@@ -1288,6 +1754,7 @@ function openProfileModal() {
     }
     
     // Display badges
+    renderProfileStreaks();
     renderBadgesDisplay();
     renderMilestones();
     
@@ -1297,6 +1764,39 @@ function openProfileModal() {
 // Close profile modal
 function closeProfileModal() {
     document.getElementById('profileModal').classList.remove('active');
+}
+
+function openStreakFireModal(streak) {
+    activeStreakFireValue = streak;
+    const tiers = getStreakFireTiers();
+    const unlockedCount = tiers.filter(tier => streak >= tier.min).length;
+
+    document.getElementById('streakFireModalSummary').textContent =
+        unlockedCount > 0
+            ? `${streak} streak unlocked ${unlockedCount} fire style${unlockedCount === 1 ? '' : 's'}.`
+            : `${streak} streak has not unlocked a named fire style yet. Reach 10 to unlock Ember Fire.`;
+
+    document.getElementById('streakFireTiers').innerHTML = tiers.map(tier => {
+        const unlocked = streak >= tier.min;
+        return `
+            <div class="streak-fire-tier ${unlocked ? 'unlocked' : 'locked'}">
+                <div class="streak-fire-tier-copy">
+                    <div class="streak-fire-tier-topline">
+                        <strong>${tier.name}</strong>
+                        <span>${tier.min}+ streak needed</span>
+                    </div>
+                </div>
+                <span class="streak-fire-tier-state">${unlocked ? 'Unlocked' : 'Locked'}</span>
+            </div>
+        `;
+    }).join('');
+
+    document.getElementById('streakFireModal').classList.add('active');
+}
+
+function closeStreakFireModal() {
+    activeStreakFireValue = 0;
+    document.getElementById('streakFireModal').classList.remove('active');
 }
 
 // Render badges in the profile modal
@@ -1317,6 +1817,74 @@ function renderBadgesDisplay() {
     });
     
     document.getElementById('badgesDisplay').innerHTML = badgesHTML;
+}
+
+function renderProfileStreaks() {
+    const streaksContainer = document.getElementById('profileStreaksDisplay');
+    if (!streaksContainer) return;
+
+    const challengeRows = challenges.map(challenge => ({
+        name: challenge.name,
+        label: 'Goal',
+        current: getChallengeStreak(challenge),
+        highest: getChallengeBestStreak(challenge)
+    }));
+
+    const workoutRows = workouts.map(workout => ({
+        name: workout.name,
+        label: 'Workout',
+        current: getWorkoutStreak(workout),
+        highest: getWorkoutBestStreak(workout)
+    }));
+
+    if (challengeRows.length === 0 && workoutRows.length === 0) {
+        streaksContainer.innerHTML = '<p class="profile-streak-empty">Your challenge and workout streaks will appear here once you start tracking them.</p>';
+        return;
+    }
+
+    streaksContainer.innerHTML = `
+        ${renderProfileStreakGroup('Goals', challengeRows)}
+        ${renderProfileStreakGroup('Workouts', workoutRows)}
+    `;
+}
+
+function renderProfileStreakGroup(title, items) {
+    if (items.length === 0) {
+        return `
+            <div class="profile-streak-group">
+                <h5>${title}</h5>
+                <p class="profile-streak-empty">No ${title.toLowerCase()} yet.</p>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="profile-streak-group">
+            <h5>${title}</h5>
+            <div class="profile-streak-list">
+                ${items.map(item => `
+                    <div class="profile-streak-item">
+                        <div class="profile-streak-item-main">
+                            <p class="profile-streak-item-name">${item.name}</p>
+                            <p class="profile-streak-item-type">${item.label}</p>
+                        </div>
+                        <div class="profile-streak-stats">
+                            <div class="profile-streak-stat">
+                                ${renderStreakFireButton(item.current)}
+                                <span class="profile-streak-stat-value">${item.current}</span>
+                                <span class="profile-streak-stat-label">Current</span>
+                            </div>
+                            <div class="profile-streak-stat">
+                                ${renderStreakFireButton(item.highest)}
+                                <span class="profile-streak-stat-value">${item.highest}</span>
+                                <span class="profile-streak-stat-label">Highest</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
 }
 
 function renderMilestones() {
@@ -1365,21 +1933,15 @@ function checkNewBadges() {
     });
     
     // Check points-based badges
-    if (!userProfile.unlockedBadges.includes('first-points') && userProfile.points >= 100) {
-        userProfile.unlockedBadges.push('first-points');
-        recordMilestone('badge', `Unlocked badge "${BADGES['first-points'].name}"`, BADGES['first-points'].description, false);
-        showBadgeUnlock('first-points', BADGES['first-points']);
-    }
-    if (!userProfile.unlockedBadges.includes('point-collector') && userProfile.points >= 500) {
-        userProfile.unlockedBadges.push('point-collector');
-        recordMilestone('badge', `Unlocked badge "${BADGES['point-collector'].name}"`, BADGES['point-collector'].description, false);
-        showBadgeUnlock('point-collector', BADGES['point-collector']);
-    }
-    if (!userProfile.unlockedBadges.includes('wealth') && userProfile.points >= 1000) {
-        userProfile.unlockedBadges.push('wealth');
-        recordMilestone('badge', `Unlocked badge "${BADGES['wealth'].name}"`, BADGES['wealth'].description, false);
-        showBadgeUnlock('wealth', BADGES['wealth']);
-    }
+    POINT_BADGE_IDS.forEach(id => {
+        const badge = BADGES[id];
+        if (!badge || userProfile.unlockedBadges.includes(id)) return;
+        if (badge.condition('points', userProfile.points)) {
+            userProfile.unlockedBadges.push(id);
+            recordMilestone('badge', `Unlocked badge "${badge.name}"`, badge.description, false);
+            showBadgeUnlock(id, badge);
+        }
+    });
     
     saveProfile();
 }
