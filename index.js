@@ -46,6 +46,9 @@ let userId = null;
 let useFirestore = false;
 let activeStreakFireValue = 0;
 let leaderboardUsers = [];
+let selectedChallengeTrackingMode = 'standard';
+let editingChallengeId = null;
+let editingWorkoutId = null;
 
 // Ghost Mode Variables
 let ghostModeWorkout = null;
@@ -74,7 +77,7 @@ const GOAL_SUGGESTIONS = {
         { name: 'Custom Sports Goal', details: 'Create your own sport or movement habit.', custom: true }
     ],
     health: [
-        { name: 'Drink 2L of Water', details: 'Finish at least 2 liters of water every day.' },
+        { name: 'Water Intake Tracker', details: 'Log every glass or bottle and keep a daily water history.', trackingMode: 'water' },
         { name: 'Healthy Meal Check-In', details: 'Track one clean, balanced meal each day.' },
         { name: 'Sleep 8 Hours', details: 'Aim for at least 8 hours of sleep every night.' },
         { name: 'Vitamins Daily', details: 'Take your supplements or vitamins every day.' },
@@ -199,7 +202,7 @@ async function loadChallengesFromFirestore() {
     try {
         // Get challenges from user profile document
         if (userProfile && userProfile.challenges) {
-            challenges = userProfile.challenges;
+            challenges = userProfile.challenges.map(normalizeChallenge);
         } else {
             challenges = [];
         }
@@ -250,6 +253,38 @@ async function saveWorkoutsToFirestore() {
     }
 }
 
+function roundWaterAmount(value) {
+    return Math.round(Number(value) * 100) / 100;
+}
+
+function sanitizeWaterQuickAmounts(amounts = []) {
+    const unique = [...new Set(
+        amounts
+            .map(amount => roundWaterAmount(amount))
+            .filter(amount => Number.isFinite(amount) && amount > 0)
+    )];
+
+    return unique.sort((a, b) => a - b);
+}
+
+function normalizeChallenge(challenge = {}) {
+    const trackingMode = challenge.trackingMode === 'water' ? 'water' : 'standard';
+    const waterHistory = challenge && typeof challenge.waterHistory === 'object' ? challenge.waterHistory : {};
+
+    return {
+        ...challenge,
+        trackingMode,
+        completedDates: challenge && typeof challenge.completedDates === 'object' ? challenge.completedDates : {},
+        waterHistory,
+        waterQuickAmounts: trackingMode === 'water'
+            ? sanitizeWaterQuickAmounts(Array.isArray(challenge.waterQuickAmounts) ? challenge.waterQuickAmounts : [0.25, 0.5, 1])
+            : [],
+        dailyTargetLiters: trackingMode === 'water'
+            ? roundWaterAmount(Number(challenge.dailyTargetLiters || 0)) || 0
+            : 0
+    };
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     loadChallenges();
@@ -259,6 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderWorkouts();
     updateProfileCard();
     renderGoalCategoryOptions();
+    updateChallengeTrackingModeUI();
     renderSuggestionOptions('challenge');
     renderSuggestionOptions('workout');
     renderLeaderboard();
@@ -297,7 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Load challenges from localStorage
 function loadChallenges() {
     const stored = localStorage.getItem(getStorageKey(STORAGE_CHALLENGES_KEY));
-    challenges = stored ? JSON.parse(stored) : [];
+    challenges = stored ? JSON.parse(stored).map(normalizeChallenge) : [];
 }
 
 // Save challenges to localStorage
@@ -395,11 +431,49 @@ function renderGoalCategoryOptions() {
 
 function selectGoalCategory(categoryId) {
     selectedGoalCategory = categoryId;
+    if (categoryId !== 'health' && selectedChallengeTrackingMode === 'water') {
+        selectedChallengeTrackingMode = 'standard';
+    }
     renderGoalCategoryOptions();
+    updateChallengeTrackingModeUI();
     renderSuggestionOptions('challenge');
     clearSuggestionSelection('challenge');
     document.getElementById('challengeName').value = '';
     document.getElementById('challengeDetails').value = '';
+}
+
+function selectChallengeTrackingMode(mode) {
+    selectedChallengeTrackingMode = mode === 'water' ? 'water' : 'standard';
+    updateChallengeTrackingModeUI();
+
+    if (selectedChallengeTrackingMode === 'water') {
+        const nameInput = document.getElementById('challengeName');
+        const detailsInput = document.getElementById('challengeDetails');
+        if (!nameInput.value.trim()) {
+            nameInput.value = 'Water Intake';
+        }
+        if (!detailsInput.value.trim()) {
+            detailsInput.value = 'Track your daily water consumption glass by glass.';
+        }
+    }
+}
+
+function updateChallengeTrackingModeUI() {
+    const trackingGroup = document.getElementById('challengeTrackingModeGroup');
+    const waterFields = document.getElementById('waterChallengeFields');
+    const isHealthCategory = selectedGoalCategory === 'health';
+    const isWaterMode = isHealthCategory && selectedChallengeTrackingMode === 'water';
+
+    if (trackingGroup) {
+        trackingGroup.style.display = isHealthCategory ? 'block' : 'none';
+    }
+
+    if (waterFields) {
+        waterFields.style.display = isWaterMode ? 'block' : 'none';
+    }
+
+    document.getElementById('challengeModeStandard')?.classList.toggle('active', !isWaterMode);
+    document.getElementById('challengeModeWater')?.classList.toggle('active', isWaterMode);
 }
 
 function renderSuggestionOptions(type) {
@@ -434,6 +508,10 @@ function applySuggestion(type, index) {
     if (!suggestion) return;
 
     if (type === 'challenge') {
+        if (selectedGoalCategory === 'health') {
+            selectedChallengeTrackingMode = suggestion.trackingMode === 'water' ? 'water' : 'standard';
+            updateChallengeTrackingModeUI();
+        }
         document.getElementById('challengeName').value = suggestion.custom ? '' : suggestion.name;
         document.getElementById('challengeDetails').value = suggestion.custom ? '' : suggestion.details;
     } else {
@@ -456,28 +534,94 @@ function createChallenge(event) {
     const name = document.getElementById('challengeName').value;
     const details = document.getElementById('challengeDetails').value;
     const color = document.querySelector('input[name="color"]:checked').value;
+    const isWaterChallenge = selectedGoalCategory === 'health' && selectedChallengeTrackingMode === 'water';
 
     if (!name.trim()) return;
 
-    const challenge = {
-        id: Date.now(),
-        name,
-        details,
-        category: selectedGoalCategory,
-        color,
-        createdDate: new Date().toISOString(),
-        completedDates: {}
-    };
+    let dailyTargetLiters = 0;
+    let waterQuickAmounts = [];
 
-    challenges.push(challenge);
-    recordMilestone('challenge-created', `Created goal "${name}"`, `${getGoalCategoryLabel(selectedGoalCategory)} goal${details ? `: ${details}` : ' is ready to track.'}`);
+    if (isWaterChallenge) {
+        dailyTargetLiters = roundWaterAmount(Number(document.getElementById('waterDailyTarget').value || 0));
+        waterQuickAmounts = sanitizeWaterQuickAmounts(
+            [
+                ...Array.from(document.querySelectorAll('input[name="water-quick-size"]:checked')).map(input => input.value),
+                document.getElementById('waterCustomQuickSize').value
+            ]
+        );
+
+        if (waterQuickAmounts.length === 0) {
+            waterQuickAmounts = [0.5, 1];
+        }
+    }
+
+    if (editingChallengeId !== null) {
+        const challengeIndex = challenges.findIndex(challenge => challenge.id === editingChallengeId);
+        if (challengeIndex === -1) return;
+
+        const existingChallenge = challenges[challengeIndex];
+        const updatedChallenge = normalizeChallenge({
+            ...existingChallenge,
+            name,
+            details,
+            category: selectedGoalCategory,
+            color,
+            trackingMode: isWaterChallenge ? 'water' : 'standard',
+            waterQuickAmounts,
+            dailyTargetLiters,
+            completedDates: isWaterChallenge ? existingChallenge.completedDates : (existingChallenge.completedDates || {}),
+            waterHistory: isWaterChallenge ? (existingChallenge.waterHistory || {}) : {}
+        });
+
+        if (updatedChallenge.trackingMode === 'water') {
+            refreshWaterCompletionState(updatedChallenge);
+        }
+
+        challenges[challengeIndex] = updatedChallenge;
+        recordMilestone(
+            'challenge-updated',
+            `Updated goal "${name}"`,
+            isWaterChallenge
+                ? `Adjusted water settings to ${updatedChallenge.waterQuickAmounts.map(amount => formatWaterAmount(amount)).join(', ')} with a ${formatWaterAmount(updatedChallenge.dailyTargetLiters || 0)} target.`
+                : `${getGoalCategoryLabel(selectedGoalCategory)} goal updated${details ? `: ${details}` : '.'}`
+        );
+    } else {
+        const challenge = normalizeChallenge({
+            id: Date.now(),
+            name,
+            details,
+            category: selectedGoalCategory,
+            color,
+            createdDate: new Date().toISOString(),
+            trackingMode: isWaterChallenge ? 'water' : 'standard',
+            completedDates: {},
+            waterHistory: {},
+            waterQuickAmounts,
+            dailyTargetLiters
+        });
+
+        challenges.push(challenge);
+        recordMilestone(
+            'challenge-created',
+            `Created goal "${name}"`,
+            isWaterChallenge
+                ? `Health goal ready to log water with ${challenge.waterQuickAmounts.map(amount => `${formatWaterAmount(amount)}`).join(', ')} quick-add buttons.`
+                : `${getGoalCategoryLabel(selectedGoalCategory)} goal${details ? `: ${details}` : ' is ready to track.'}`
+        );
+    }
     saveChallenges();
     renderChallenges();
 
     // Reset form and close modal
+    editingChallengeId = null;
     selectedGoalCategory = GOAL_CATEGORIES[0].id;
+    selectedChallengeTrackingMode = 'standard';
     document.getElementById('createChallengeForm').reset();
+    document.querySelectorAll('input[name="water-quick-size"]').forEach(input => {
+        input.checked = input.value === '0.25' || input.value === '0.5';
+    });
     renderGoalCategoryOptions();
+    updateChallengeTrackingModeUI();
     renderSuggestionOptions('challenge');
     clearSuggestionSelection('challenge');
     closeCreateModal('challenge');
@@ -496,27 +640,47 @@ function createWorkout(event) {
         return;
     }
 
-    const workout = {
-        id: Date.now(),
-        name,
-        details,
-        color,
-        selectedDays: [...selectedDays], // Array of day numbers (0-6)
-        createdDate: new Date().toISOString(),
-        completedDates: {},
-        performances: [] // Array of {date, duration, reps}
-    };
+    if (editingWorkoutId !== null) {
+        const workoutIndex = workouts.findIndex(workout => workout.id === editingWorkoutId);
+        if (workoutIndex === -1) return;
 
-    workouts.push(workout);
-    recordMilestone(
-        'workout-created',
-        `Created workout "${name}"`,
-        `Scheduled on ${getWorkoutDayNames([...selectedDays]).join(', ')}`
-    );
+        workouts[workoutIndex] = {
+            ...workouts[workoutIndex],
+            name,
+            details,
+            color,
+            selectedDays: [...selectedDays]
+        };
+
+        recordMilestone(
+            'workout-updated',
+            `Updated workout "${name}"`,
+            `Now scheduled on ${getWorkoutDayNames([...selectedDays]).join(', ')}`
+        );
+    } else {
+        const workout = {
+            id: Date.now(),
+            name,
+            details,
+            color,
+            selectedDays: [...selectedDays], // Array of day numbers (0-6)
+            createdDate: new Date().toISOString(),
+            completedDates: {},
+            performances: [] // Array of {date, duration, reps}
+        };
+
+        workouts.push(workout);
+        recordMilestone(
+            'workout-created',
+            `Created workout "${name}"`,
+            `Scheduled on ${getWorkoutDayNames([...selectedDays]).join(', ')}`
+        );
+    }
     saveWorkouts();
     renderWorkouts();
 
     // Reset form and close modal
+    editingWorkoutId = null;
     selectedDays = [];
     document.getElementById('createWorkoutForm').reset();
     document.querySelectorAll('.day-btn').forEach(btn => btn.classList.remove('selected'));
@@ -542,10 +706,157 @@ function deleteWorkout(id) {
     }
 }
 
+function openEditChallengeModal(challengeId) {
+    const challenge = challenges.find(item => item.id === challengeId);
+    if (!challenge) return;
+
+    editingChallengeId = challengeId;
+    selectedGoalCategory = challenge.category || GOAL_CATEGORIES[0].id;
+    selectedChallengeTrackingMode = challenge.trackingMode === 'water' ? 'water' : 'standard';
+
+    document.getElementById('challengeName').value = challenge.name || '';
+    document.getElementById('challengeDetails').value = challenge.details || '';
+    document.getElementById('waterDailyTarget').value = challenge.dailyTargetLiters || 2;
+    const builtInWaterSizes = new Set(['0.25', '0.5', '0.75', '1']);
+    const customWaterAmount = (challenge.waterQuickAmounts || []).find(amount => !builtInWaterSizes.has(String(roundWaterAmount(amount))));
+    document.getElementById('waterCustomQuickSize').value = customWaterAmount || '';
+
+    document.querySelectorAll('input[name="color"]').forEach(input => {
+        input.checked = input.value === challenge.color;
+    });
+
+    const quickAmounts = new Set((challenge.waterQuickAmounts || []).map(amount => String(roundWaterAmount(amount))));
+    document.querySelectorAll('input[name="water-quick-size"]').forEach(input => {
+        input.checked = quickAmounts.has(String(roundWaterAmount(input.value)));
+    });
+
+    renderGoalCategoryOptions();
+    updateChallengeTrackingModeUI();
+    renderSuggestionOptions('challenge');
+    clearSuggestionSelection('challenge');
+    document.querySelector('#createChallengeModal .modal-header h2').textContent = 'Edit Goal';
+    document.getElementById('challengeSubmitButton').textContent = 'Save Goal';
+    document.getElementById('createChallengeModal').classList.add('active');
+}
+
+function openEditWorkoutModal(workoutId) {
+    const workout = workouts.find(item => item.id === workoutId);
+    if (!workout) return;
+
+    editingWorkoutId = workoutId;
+    selectedDays = Array.isArray(workout.selectedDays) ? [...workout.selectedDays] : [];
+
+    document.getElementById('workoutName').value = workout.name || '';
+    document.getElementById('workoutDetails').value = workout.details || '';
+    document.querySelectorAll('input[name="workout-color"]').forEach(input => {
+        input.checked = input.value === workout.color;
+    });
+
+    updateDayPickerUI();
+    renderSuggestionOptions('workout');
+    clearSuggestionSelection('workout');
+    document.querySelector('#createWorkoutModal .modal-header h2').textContent = 'Edit Workout';
+    document.getElementById('workoutSubmitButton').textContent = 'Save Workout';
+    document.getElementById('createWorkoutModal').classList.add('active');
+}
+
+function formatWaterAmount(amount) {
+    const rounded = roundWaterAmount(amount);
+    return `${rounded} L`;
+}
+
+function formatWaterAmountCompact(amount) {
+    const rounded = roundWaterAmount(amount);
+    return rounded >= 1 ? `${rounded}L` : `${Math.round(rounded * 1000)}ml`;
+}
+
+function getWaterEntryForDate(challenge, dateStr) {
+    if (challenge.trackingMode !== 'water') {
+        return { totalLiters: 0, entries: [] };
+    }
+
+    const entry = challenge.waterHistory?.[dateStr];
+    return {
+        totalLiters: roundWaterAmount(entry?.totalLiters || 0),
+        entries: Array.isArray(entry?.entries) ? entry.entries : []
+    };
+}
+
+function getWaterProgressDates(challenge) {
+    if (challenge.trackingMode !== 'water') {
+        return challenge.completedDates || {};
+    }
+
+    const target = Number(challenge.dailyTargetLiters || 0);
+    const dates = {};
+    Object.keys(challenge.waterHistory || {}).forEach(dateStr => {
+        const total = Number(challenge.waterHistory[dateStr]?.totalLiters || 0);
+        if ((target > 0 && total >= target) || (target <= 0 && total > 0)) {
+            dates[dateStr] = true;
+        }
+    });
+    return dates;
+}
+
+function refreshWaterCompletionState(challenge) {
+    challenge.completedDates = getWaterProgressDates(challenge);
+}
+
+function addWaterEntry(challengeId, amountLiters) {
+    const challenge = challenges.find(item => item.id === challengeId);
+    if (!challenge || challenge.trackingMode !== 'water') return;
+
+    const today = getDateString(new Date());
+    const amount = roundWaterAmount(amountLiters);
+    const currentEntry = getWaterEntryForDate(challenge, today);
+    const previousTotal = currentEntry.totalLiters;
+    const nextTotal = roundWaterAmount(previousTotal + amount);
+
+    if (!challenge.waterHistory) {
+        challenge.waterHistory = {};
+    }
+
+    challenge.waterHistory[today] = {
+        totalLiters: nextTotal,
+        entries: [
+            ...currentEntry.entries,
+            {
+                amountLiters: amount,
+                createdAt: new Date().toISOString()
+            }
+        ]
+    };
+
+    const target = Number(challenge.dailyTargetLiters || 0);
+    const reachedBefore = target > 0 ? previousTotal >= target : previousTotal > 0;
+    const reachedNow = target > 0 ? nextTotal >= target : nextTotal > 0;
+
+    refreshWaterCompletionState(challenge);
+
+    if (!reachedBefore && reachedNow) {
+        const streak = getChallengeStreak(challenge);
+        const points = calculatePoints('challenge', streak);
+        addPoints(points);
+        recordMilestone(
+            'water-target-hit',
+            `Logged water for "${challenge.name}"`,
+            target > 0
+                ? `Reached ${formatWaterAmount(target)} on ${today}.`
+                : `Logged ${formatWaterAmount(nextTotal)} on ${today}.`
+        );
+    }
+
+    saveChallenges();
+    renderChallenges();
+}
+
 // Toggle day completion for challenge
 function toggleChallengeDay(challengeId, dateStr) {
     const challenge = challenges.find(c => c.id === challengeId);
     if (challenge) {
+        if (challenge.trackingMode === 'water') {
+            return;
+        }
         if (challenge.completedDates[dateStr]) {
             delete challenge.completedDates[dateStr];
         } else {
@@ -585,10 +896,11 @@ function getChallengeStreak(challenge) {
     const today = getDateString(new Date());
     let streak = 0;
     let currentDate = new Date();
+    const progressDates = getWaterProgressDates(challenge);
 
     while (true) {
         const dateStr = getDateString(currentDate);
-        if (challenge.completedDates[dateStr]) {
+        if (progressDates[dateStr]) {
             streak++;
         } else if (dateStr !== today) {
             break;
@@ -632,7 +944,8 @@ function getEarliestCompletedDate(completedDates) {
 }
 
 function getChallengeBestStreak(challenge) {
-    const earliestDate = getEarliestCompletedDate(challenge.completedDates);
+    const progressDates = getWaterProgressDates(challenge);
+    const earliestDate = getEarliestCompletedDate(progressDates);
     if (!earliestDate) return 0;
 
     let bestStreak = 0;
@@ -643,7 +956,7 @@ function getChallengeBestStreak(challenge) {
 
     while (currentDate <= today) {
         const dateStr = getDateString(currentDate);
-        if (challenge.completedDates[dateStr]) {
+        if (progressDates[dateStr]) {
             currentStreak++;
             bestStreak = Math.max(bestStreak, currentStreak);
         } else {
@@ -821,12 +1134,51 @@ function renderChallenges() {
 
     empty.style.display = 'none';
 
-    list.innerHTML = challenges.map(challenge => `
-        <div class="challenge-card" style="border-left-color: ${challenge.color}">
+    list.innerHTML = challenges.map(challenge => challenge.trackingMode === 'water'
+        ? renderWaterChallengeCard(challenge)
+        : `
+            <div class="challenge-card" style="border-left-color: ${challenge.color}">
+                <div class="challenge-header">
+                    <div class="challenge-title">
+                        <h3>${challenge.name}</h3>
+                        <p class="goal-category-badge">${getGoalCategoryLabel(challenge.category)}</p>
+                        <p class="challenge-details">${challenge.details}</p>
+                    </div>
+                    <div class="card-actions">
+                        <button class="btn-edit" type="button" onclick="openEditChallengeModal(${challenge.id})">Edit</button>
+                        <button class="btn-delete" data-id="${challenge.id}" onclick="deleteChallenge(${challenge.id})">🗑️</button>
+                    </div>
+                </div>
+
+                <div class="streak-container">
+                    ${renderStreakFireButton(getChallengeStreak(challenge))}
+                    <span class="streak-count">${getChallengeStreak(challenge)}</span>
+                    <span class="streak-label">day streak</span>
+                </div>
+
+                ${renderCalendar(challenge, 'challenge')}
+            </div>
+        `
+    ).join('');
+}
+
+function renderWaterChallengeCard(challenge) {
+    const today = getDateString(new Date());
+    const todayEntry = getWaterEntryForDate(challenge, today);
+    const dailyTarget = Number(challenge.dailyTargetLiters || 0);
+    const progressPercent = dailyTarget > 0
+        ? Math.min(100, Math.round((todayEntry.totalLiters / dailyTarget) * 100))
+        : todayEntry.totalLiters > 0 ? 100 : 0;
+    const historyRows = Object.entries(challenge.waterHistory || {})
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .slice(0, 7);
+
+    return `
+        <div class="challenge-card water-challenge-card" style="border-left-color: ${challenge.color}">
             <div class="challenge-header">
                 <div class="challenge-title">
                     <h3>${challenge.name}</h3>
-                    <p class="goal-category-badge">${getGoalCategoryLabel(challenge.category)}</p>
+                    <p class="goal-category-badge">Health • Water</p>
                     <p class="challenge-details">${challenge.details}</p>
                 </div>
                 <button class="btn-delete" data-id="${challenge.id}" onclick="deleteChallenge(${challenge.id})">🗑️</button>
@@ -835,12 +1187,68 @@ function renderChallenges() {
             <div class="streak-container">
                 ${renderStreakFireButton(getChallengeStreak(challenge))}
                 <span class="streak-count">${getChallengeStreak(challenge)}</span>
-                <span class="streak-label">day streak</span>
+                <span class="streak-label">${dailyTarget > 0 ? 'target streak' : 'active days'}</span>
+            </div>
+
+            <div class="water-quick-actions">
+                <button
+                    type="button"
+                    class="btn-edit"
+                    onclick="openEditChallengeModal(${challenge.id})"
+                >
+                    Edit Goal
+                </button>
+            </div>
+
+            <div class="water-today-panel">
+                <div>
+                    <p class="water-panel-label">Today</p>
+                    <p class="water-panel-total">${formatWaterAmount(todayEntry.totalLiters)}</p>
+                    <p class="water-panel-subtitle">${dailyTarget > 0 ? `Target ${formatWaterAmount(dailyTarget)}` : 'No target set'}</p>
+                </div>
+                <div class="water-progress">
+                    <div class="water-progress-bar">
+                        <div class="water-progress-fill" style="width: ${progressPercent}%; background: ${challenge.color};"></div>
+                    </div>
+                    <span>${progressPercent}%</span>
+                </div>
+            </div>
+
+            <div class="water-quick-actions">
+                ${challenge.waterQuickAmounts.map(amount => `
+                    <button
+                        type="button"
+                        class="water-add-btn"
+                        onclick="addWaterEntry(${challenge.id}, ${amount})"
+                    >
+                        + ${formatWaterAmount(amount)}
+                    </button>
+                `).join('')}
+            </div>
+
+            <div class="water-history-panel">
+                <div class="water-history-header">
+                    <h4>Recent Water History</h4>
+                    <span>${historyRows.length} day${historyRows.length === 1 ? '' : 's'}</span>
+                </div>
+                ${historyRows.length > 0 ? `
+                    <div class="water-history-list">
+                        ${historyRows.map(([dateStr, entry]) => `
+                            <div class="water-history-item">
+                                <div>
+                                    <strong>${new Date(`${dateStr}T00:00:00`).toLocaleDateString()}</strong>
+                                    <p>${Array.isArray(entry.entries) ? entry.entries.length : 0} drink${Array.isArray(entry.entries) && entry.entries.length === 1 ? '' : 's'}</p>
+                                </div>
+                                <span>${formatWaterAmount(Number(entry.totalLiters || 0))}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : '<p class="water-history-empty">No water logged yet. Use the quick buttons to start tracking.</p>'}
             </div>
 
             ${renderCalendar(challenge, 'challenge')}
         </div>
-    `).join('');
+    `;
 }
 
 // Render all workouts
@@ -877,6 +1285,16 @@ function renderWorkouts() {
 
             <button class="start-workout-btn" onclick="startGhostMode(${workout.id})">👻 Start Workout</button>
 
+            <div class="water-quick-actions">
+                <button
+                    type="button"
+                    class="btn-edit"
+                    onclick="openEditWorkoutModal(${workout.id})"
+                >
+                    Edit Workout
+                </button>
+            </div>
+
             ${renderCalendar(workout, 'workout')}
         </div>
     `).join('');
@@ -905,7 +1323,10 @@ function renderCalendar(item, type) {
 
     for (const {date, isCurrentMonth, dateStr} of dates) {
         const dayOfWeek = date.getDay();
-        const isCompleted = item.completedDates[dateStr];
+        const isWaterChallenge = type === 'challenge' && item.trackingMode === 'water';
+        const waterEntry = isWaterChallenge ? getWaterEntryForDate(item, dateStr) : null;
+        const progressDates = isWaterChallenge ? getWaterProgressDates(item) : item.completedDates;
+        const isCompleted = progressDates[dateStr];
         const isToday = dateStr === today;
         const isOtherMonth = !isCurrentMonth;
 
@@ -917,6 +1338,7 @@ function renderCalendar(item, type) {
 
         let className = 'calendar-day';
         if (isCompleted) className += ' completed';
+        if (isWaterChallenge && waterEntry.totalLiters > 0) className += ' water-logged';
         if (isToday) className += ' today';
         if (isOtherMonth) className += ' other-month';
         if (type === 'workout' && !isSelectedDay) className += ' other-month'; // Gray out non-selected days
@@ -925,11 +1347,14 @@ function renderCalendar(item, type) {
         const dataAttr = type === 'challenge' 
             ? `data-challenge-id="${item.id}" data-date="${dateStr}"`
             : `data-workout-id="${item.id}" data-date="${dateStr}"`;
-        const onClickAttr = (isOtherMonth || (type === 'workout' && !isSelectedDay)) ? '' : dataAttr;
+        const onClickAttr = (isOtherMonth || (type === 'workout' && !isSelectedDay) || isWaterChallenge) ? '' : dataAttr;
+        const dayContent = isWaterChallenge && waterEntry.totalLiters > 0
+            ? `<div class="calendar-water-value">${formatWaterAmountCompact(waterEntry.totalLiters)}</div>`
+            : (isCompleted ? '✓' : dayNum);
 
         calendarHTML += `
             <div class="${className}" ${onClickAttr}>
-                ${isCompleted ? '✓' : dayNum}
+                ${dayContent}
             </div>
         `;
     }
@@ -972,13 +1397,21 @@ function updateDayPickerUI() {
 // Modal functions
 function openCreateModal(type) {
     if (type === 'challenge') {
+        editingChallengeId = null;
         selectedGoalCategory = GOAL_CATEGORIES[0].id;
+        selectedChallengeTrackingMode = 'standard';
+        document.querySelector('#createChallengeModal .modal-header h2').textContent = 'New Goal';
+        document.getElementById('challengeSubmitButton').textContent = 'Create Goal';
         renderGoalCategoryOptions();
+        updateChallengeTrackingModeUI();
         renderSuggestionOptions('challenge');
         clearSuggestionSelection('challenge');
         document.getElementById('createChallengeModal').classList.add('active');
     } else if (type === 'workout') {
+        editingWorkoutId = null;
         selectedDays = [];
+        document.querySelector('#createWorkoutModal .modal-header h2').textContent = 'New Workout';
+        document.getElementById('workoutSubmitButton').textContent = 'Create Workout';
         updateDayPickerUI();
         clearSuggestionSelection('workout');
         document.getElementById('createWorkoutModal').classList.add('active');
@@ -987,8 +1420,14 @@ function openCreateModal(type) {
 
 function closeCreateModal(type) {
     if (type === 'challenge') {
+        editingChallengeId = null;
+        document.querySelector('#createChallengeModal .modal-header h2').textContent = 'New Goal';
+        document.getElementById('challengeSubmitButton').textContent = 'Create Goal';
         document.getElementById('createChallengeModal').classList.remove('active');
     } else if (type === 'workout') {
+        editingWorkoutId = null;
+        document.querySelector('#createWorkoutModal .modal-header h2').textContent = 'New Workout';
+        document.getElementById('workoutSubmitButton').textContent = 'Create Workout';
         document.getElementById('createWorkoutModal').classList.remove('active');
     }
 }
@@ -1071,10 +1510,7 @@ function getUserMaxWorkoutStreak(userWorkouts = []) {
 function getLeaderboardEntryFromDoc(docSnap) {
     const data = docSnap.data();
     const docChallenges = Array.isArray(data.challenges)
-        ? data.challenges.map(challenge => ({
-            ...challenge,
-            completedDates: challenge && typeof challenge.completedDates === 'object' ? challenge.completedDates : {}
-        }))
+        ? data.challenges.map(normalizeChallenge)
         : [];
     const docWorkouts = Array.isArray(data.workouts)
         ? data.workouts.map(workout => ({

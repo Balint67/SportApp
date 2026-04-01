@@ -464,6 +464,10 @@ body {
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
 }
 
+.water-challenge-card {
+    background: linear-gradient(180deg, rgba(78, 205, 196, 0.08), rgba(15, 23, 42, 0.92));
+}
+
 .workout-card {
     background-color: var(--bg-secondary);
     border-radius: 16px;
@@ -525,6 +529,31 @@ body {
 
 .btn-delete:hover {
     color: #FF6B6B;
+}
+
+.card-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 12px;
+}
+
+.btn-edit {
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(78, 205, 196, 0.25);
+    background: rgba(78, 205, 196, 0.08);
+    color: #8ae4dd;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+    transition: all 0.2s ease;
+}
+
+.btn-edit:hover {
+    border-color: rgba(78, 205, 196, 0.45);
+    background: rgba(78, 205, 196, 0.16);
+    color: #c9fffb;
 }
 
 /* Streak Counter */
@@ -609,6 +638,136 @@ body {
     transform: scale(1.06);
 }
 
+.water-today-panel {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding: 16px;
+    border-radius: 14px;
+    background: rgba(78, 205, 196, 0.08);
+    border: 1px solid rgba(78, 205, 196, 0.2);
+}
+
+.water-panel-label,
+.water-panel-subtitle {
+    margin: 0;
+    color: var(--text-secondary);
+}
+
+.water-panel-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.water-panel-total {
+    margin: 6px 0 4px;
+    font-size: 28px;
+    font-weight: 700;
+    color: #7be0f5;
+}
+
+.water-progress {
+    min-width: 120px;
+    flex: 1;
+    max-width: 180px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.water-progress-bar {
+    width: 100%;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.2);
+    overflow: hidden;
+}
+
+.water-progress-fill {
+    height: 100%;
+    border-radius: inherit;
+    transition: width 0.2s ease;
+}
+
+.water-quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.water-add-btn {
+    padding: 10px 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(123, 224, 245, 0.35);
+    background: rgba(123, 224, 245, 0.08);
+    color: #b7f6ff;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.water-add-btn:hover {
+    transform: translateY(-1px);
+    border-color: rgba(123, 224, 245, 0.55);
+    background: rgba(123, 224, 245, 0.14);
+}
+
+.water-history-panel {
+    margin-bottom: 16px;
+    padding: 16px;
+    border-radius: 14px;
+    background: rgba(15, 23, 42, 0.55);
+    border: 1px solid var(--border-color);
+}
+
+.water-history-header,
+.water-history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.water-history-header {
+    margin-bottom: 12px;
+}
+
+.water-history-header h4,
+.water-history-item p,
+.water-history-item strong,
+.water-history-empty {
+    margin: 0;
+}
+
+.water-history-header span,
+.water-history-item p,
+.water-history-empty {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.water-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.water-history-item {
+    padding-top: 10px;
+    border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.water-history-item:first-child {
+    padding-top: 0;
+    border-top: none;
+}
+
 /* Calendar */
 .calendar {
     display: grid;
@@ -655,6 +814,17 @@ body {
     background-color: var(--accent);
     color: white;
     border-color: var(--accent);
+}
+
+.calendar-day.water-logged {
+    font-size: 11px;
+    line-height: 1.1;
+    padding: 4px;
+}
+
+.calendar-water-value {
+    text-align: center;
+    font-weight: 700;
 }
 
 .calendar-day.today {
@@ -2036,6 +2206,38 @@ body {
     border-color: #4ECDC4;
     color: #4ECDC4;
     box-shadow: 0 0 0 2px rgba(78, 205, 196, 0.12);
+}
+
+.water-config-panel {
+    margin-bottom: 18px;
+    padding: 16px;
+    border-radius: 16px;
+    background: rgba(123, 224, 245, 0.07);
+    border: 1px solid rgba(123, 224, 245, 0.18);
+}
+
+.water-size-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.water-size-option {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.water-size-option input {
+    accent-color: #4ECDC4;
 }
 
 .suggestion-chip {
