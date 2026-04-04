@@ -1,0 +1,8 @@
+{
+  "appId": "com.sporttracker.app",
+  "appName": "Sport Tracker",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Sport Tracker</string>
+    <string name="title_activity_main">Sport Tracker</string>
+    <string name="package_name">com.sporttracker.app</string>
+    <string name="custom_url_scheme">com.sporttracker.app</string>
+</resources>

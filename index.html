@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sport Challenge Tracker</title>
     <link rel="stylesheet" href="index.css">
+    <script>
+        (function () {
+            const hasSavedSession = Boolean(localStorage.getItem('userId'));
+            document.documentElement.setAttribute('data-auth-hint', hasSavedSession ? 'signed-in' : 'signed-out');
+        })();
+    </script>
 </head>
 <body>
     <!-- Authentication Screen -->
@@ -60,7 +66,7 @@
     </div>
 
     <!-- Main App -->
-    <div id="appContainer" class="app-container" style="display: none;">
+    <div id="appContainer" class="app-container">
     <div class="container">
         <!-- Header -->
         <header class="header">
@@ -80,6 +86,10 @@
             </div>
             <div class="profile-stats">
                 <div class="stat-item">
+                    <span class="stat-number" id="totalMoney">0</span>
+                    <span class="stat-label">Money</span>
+                </div>
+                <div class="stat-item">
                     <span class="stat-number" id="totalPoints">0</span>
                     <span class="stat-label">Points</span>
                 </div>
@@ -87,12 +97,7 @@
                     <span class="stat-number" id="shieldCount">0</span>
                     <span class="stat-label">Shields</span>
                 </div>
-                <div class="stat-item">
-                    <span class="stat-number" id="badgeCount">0</span>
-                    <span class="stat-label">Badges</span>
-                </div>
             </div>
-            <button class="btn-profile" onclick="openProfileModal()">View Profile</button>
         </div>
 
         <!-- Navigation Tabs -->
@@ -199,6 +204,25 @@
                     <label for="challengeDetails">Details</label>
                     <input type="text" id="challengeDetails" placeholder="e.g., Read 20 pages before bed">
                 </div>
+                <div class="form-group">
+                    <label class="timer-toggle">
+                        <input type="checkbox" id="challengeTimerEnabled">
+                        <span class="timer-toggle-switch" aria-hidden="true"></span>
+                        <span class="timer-toggle-copy">
+                            <strong>Set a time limit for this goal</strong>
+                            <small>Turn this on if the goal should end automatically.</small>
+                        </span>
+                    </label>
+                    <div class="timer-input-row">
+                        <input type="number" id="challengeDurationValue" min="1" step="1" value="2" placeholder="2">
+                        <select id="challengeDurationUnit">
+                            <option value="days">Days</option>
+                            <option value="weeks" selected>Weeks</option>
+                            <option value="months">Months</option>
+                        </select>
+                    </div>
+                    <p class="suggestion-help">Example: 2 weeks. When the time is over, the goal is marked completed automatically.</p>
+                </div>
                 <div id="waterChallengeFields" class="water-config-panel" style="display: none;">
                     <div class="form-group">
                         <label for="waterDailyTarget">Daily Target (Liters)</label>
@@ -296,6 +320,25 @@
                 <div class="form-group">
                     <label for="workoutDetails">Details</label>
                     <input type="text" id="workoutDetails" placeholder="e.g., 5km run">
+                </div>
+                <div class="form-group">
+                    <label class="timer-toggle">
+                        <input type="checkbox" id="workoutTimerEnabled">
+                        <span class="timer-toggle-switch" aria-hidden="true"></span>
+                        <span class="timer-toggle-copy">
+                            <strong>Set a time limit for this workout plan</strong>
+                            <small>Turn this on if the workout plan should finish on its own.</small>
+                        </span>
+                    </label>
+                    <div class="timer-input-row">
+                        <input type="number" id="workoutDurationValue" min="1" step="1" value="2" placeholder="2">
+                        <select id="workoutDurationUnit">
+                            <option value="days">Days</option>
+                            <option value="weeks" selected>Weeks</option>
+                            <option value="months">Months</option>
+                        </select>
+                    </div>
+                    <p class="suggestion-help">Example: 2 weeks. When the time is over, the workout plan is marked completed automatically.</p>
                 </div>
                 <div class="form-group">
                     <label>Suggestions</label>
@@ -449,8 +492,12 @@
                 <div class="profile-sections">
                     <!-- Points Section -->
                     <div class="profile-section">
-                        <h4>💰 Points & Progression</h4>
+                        <h4>Rewards & Progression</h4>
                         <div class="points-display">
+                            <div class="big-stat">
+                                <span id="profileMoney">0</span>
+                                <span>Total Money</span>
+                            </div>
                             <div class="big-stat">
                                 <span id="profilePoints">0</span>
                                 <span>Total Points</span>
@@ -469,8 +516,8 @@
                             <div class="shield-info">
                                 <span id="profileShields">0</span> shields available
                             </div>
-                            <button class="btn-buy-shield" onclick="buyShield()">Buy Shield (100 points)</button>
-                            <p class="shield-description">Protects your streak for one missed day</p>
+                            <button class="btn-buy-shield" onclick="buyShield()">Buy Shield (100 money)</button>
+                            <p class="shield-description">Points are for collecting and rank progress. Money is used to buy shields.</p>
                         </div>
                     </div>
 
@@ -587,6 +634,7 @@
       await setDoc(userDocRef, {
         username: currentData.username || fallbackUsername || user.displayName || user.email?.split('@')[0] || 'Athlete',
         email: currentData.email || user.email || '',
+        money: Number(currentData.money || 0),
         updatedAt: new Date().toISOString()
       }, { merge: true });
       return;
@@ -595,6 +643,7 @@
     await setDoc(userDocRef, {
       username: fallbackUsername || user.displayName || user.email?.split('@')[0] || 'Athlete',
       email: user.email || '',
+      money: 0,
       points: 0,
       shields: 0,
       unlockedBadges: [],
@@ -626,14 +675,13 @@
     const appContainer = document.getElementById('appContainer');
     
     if (user) {
-      // User is logged in
-      try {
-        await ensureUserProfile(user);
-      } catch (error) {
-        console.error('Profile sync error:', error);
-      }
+      document.documentElement.setAttribute('data-auth-hint', 'signed-in');
       authScreen.style.display = 'none';
       appContainer.style.display = 'block';
+      // User is logged in
+      ensureUserProfile(user).catch((error) => {
+        console.error('Profile sync error:', error);
+      });
       localStorage.setItem('userEmail', user.email);
       localStorage.setItem('userId', user.uid);
       // Initialize app for logged-in user
@@ -642,6 +690,7 @@
       }
     } else {
       // User is not logged in
+      document.documentElement.setAttribute('data-auth-hint', 'signed-out');
       authScreen.style.display = 'block';
       appContainer.style.display = 'none';
       localStorage.removeItem('userEmail');

@@ -8,6 +8,7 @@ function getDefaultProfile() {
     return {
         username: 'Athlete',
         email: '',
+        money: 0,
         points: 0,
         shields: 0,
         unlockedBadges: [],
@@ -132,6 +133,8 @@ async function initializeAppForUser(user) {
         loadWorkouts();
         loadProfile();
     }
+
+    syncTimedItems();
     
     renderChallenges();
     renderWorkouts();
@@ -167,6 +170,9 @@ async function loadProfileFromFirestore() {
                 ...getDefaultProfile(),
                 ...docSnap.data()
             };
+            userProfile.money = Number(userProfile.money || 0);
+            userProfile.points = Number(userProfile.points || 0);
+            userProfile.shields = Number(userProfile.shields || 0);
             userProfile.unlockedBadges = Array.isArray(userProfile.unlockedBadges) ? userProfile.unlockedBadges : [];
             userProfile.milestones = Array.isArray(userProfile.milestones) ? userProfile.milestones : [];
         } else {
@@ -218,7 +224,7 @@ async function loadWorkoutsFromFirestore() {
     try {
         // Get workouts from user profile document
         if (userProfile && userProfile.workouts) {
-            workouts = userProfile.workouts;
+            workouts = userProfile.workouts.map(normalizeWorkout);
         } else {
             workouts = [];
         }
@@ -257,6 +263,111 @@ function roundWaterAmount(value) {
     return Math.round(Number(value) * 100) / 100;
 }
 
+function getTodayDateString() {
+    return getDateString(new Date());
+}
+
+function formatDateLabel(dateStr) {
+    return dateStr ? new Date(`${dateStr}T00:00:00`).toLocaleDateString() : '';
+}
+
+function normalizeDurationValue(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return 1;
+    return Math.max(1, Math.floor(parsed));
+}
+
+function normalizeDurationUnit(unit) {
+    return unit === 'months' ? 'months' : unit === 'weeks' ? 'weeks' : 'days';
+}
+
+function getDurationInDays(value, unit) {
+    if (unit === 'weeks') return value * 7;
+    if (unit === 'months') return value * 30;
+    return value;
+}
+
+function calculateEndDate(startDate, durationValue, durationUnit) {
+    const safeStart = startDate || getTodayDateString();
+    const totalDays = getDurationInDays(durationValue, durationUnit);
+    const endDate = new Date(`${safeStart}T00:00:00`);
+    endDate.setDate(endDate.getDate() + totalDays - 1);
+    return getDateString(endDate);
+}
+
+function normalizeTimeSettings(item = {}) {
+    const timerEnabled = Boolean(item.timerEnabled);
+    const durationValue = normalizeDurationValue(item.durationValue);
+    const durationUnit = normalizeDurationUnit(item.durationUnit);
+    const startDate = item.startDate || item.timerStartDate || item.createdDate?.slice(0, 10) || getTodayDateString();
+    const endDate = timerEnabled
+        ? (item.endDate || calculateEndDate(startDate, durationValue, durationUnit))
+        : '';
+
+    return {
+        timerEnabled,
+        durationValue,
+        durationUnit,
+        startDate,
+        endDate,
+        timerCompletedAt: item.timerCompletedAt || '',
+        timerCompletionRecorded: Boolean(item.timerCompletionRecorded)
+    };
+}
+
+function getTimerSummary(item) {
+    if (!item.timerEnabled) return 'No time limit';
+    return `${item.durationValue} ${item.durationUnit} • ${formatDateLabel(item.startDate)} - ${formatDateLabel(item.endDate)}`;
+}
+
+function getTimerStatus(item) {
+    if (!item.timerEnabled) {
+        return {
+            phase: 'untimed',
+            label: 'Open-ended',
+            detail: 'No end date set'
+        };
+    }
+
+    const today = getTodayDateString();
+    if (today > item.endDate) {
+        return {
+            phase: 'completed',
+            label: 'Completed',
+            detail: `Ended on ${formatDateLabel(item.endDate)}`
+        };
+    }
+
+    const endDate = new Date(`${item.endDate}T00:00:00`);
+    const currentDate = new Date(`${today}T00:00:00`);
+    const daysLeft = Math.floor((endDate - currentDate) / 86400000) + 1;
+
+    return {
+        phase: 'active',
+        label: daysLeft === 1 ? 'Ends today' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`,
+        detail: `${formatDateLabel(item.startDate)} - ${formatDateLabel(item.endDate)}`
+    };
+}
+
+function isTimerFinished(item) {
+    return Boolean(item.timerEnabled) && getTodayDateString() > item.endDate;
+}
+
+function recordTimerCompletion(item, kind) {
+    if (!item.timerEnabled || item.timerCompletionRecorded || !isTimerFinished(item)) {
+        return false;
+    }
+
+    item.timerCompletedAt = new Date().toISOString();
+    item.timerCompletionRecorded = true;
+    recordMilestone(
+        `${kind}-timer-complete`,
+        `${kind === 'challenge' ? 'Goal' : 'Workout'} "${item.name}" completed`,
+        `Time window finished on ${formatDateLabel(item.endDate)}.`
+    );
+    return true;
+}
+
 function sanitizeWaterQuickAmounts(amounts = []) {
     const unique = [...new Set(
         amounts
@@ -270,9 +381,11 @@ function sanitizeWaterQuickAmounts(amounts = []) {
 function normalizeChallenge(challenge = {}) {
     const trackingMode = challenge.trackingMode === 'water' ? 'water' : 'standard';
     const waterHistory = challenge && typeof challenge.waterHistory === 'object' ? challenge.waterHistory : {};
+    const timeSettings = normalizeTimeSettings(challenge);
 
     return {
         ...challenge,
+        ...timeSettings,
         trackingMode,
         completedDates: challenge && typeof challenge.completedDates === 'object' ? challenge.completedDates : {},
         waterHistory,
@@ -285,11 +398,22 @@ function normalizeChallenge(challenge = {}) {
     };
 }
 
+function normalizeWorkout(workout = {}) {
+    return {
+        ...workout,
+        ...normalizeTimeSettings(workout),
+        completedDates: workout && typeof workout.completedDates === 'object' ? workout.completedDates : {},
+        selectedDays: Array.isArray(workout?.selectedDays) ? workout.selectedDays : [],
+        performances: Array.isArray(workout?.performances) ? workout.performances : []
+    };
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     loadChallenges();
     loadWorkouts();
     loadProfile();
+    syncTimedItems();
     renderChallenges();
     renderWorkouts();
     updateProfileCard();
@@ -351,7 +475,7 @@ function saveChallenges() {
 // Load workouts from localStorage
 function loadWorkouts() {
     const stored = localStorage.getItem(getStorageKey(STORAGE_WORKOUTS_KEY));
-    workouts = stored ? JSON.parse(stored) : [];
+    workouts = stored ? JSON.parse(stored).map(normalizeWorkout) : [];
 }
 
 // Save workouts to localStorage
@@ -377,6 +501,9 @@ function loadProfile() {
     } else {
         userProfile = getDefaultProfile();
     }
+    userProfile.money = Number(userProfile.money || 0);
+    userProfile.points = Number(userProfile.points || 0);
+    userProfile.shields = Number(userProfile.shields || 0);
     userProfile.unlockedBadges = Array.isArray(userProfile.unlockedBadges) ? userProfile.unlockedBadges : [];
     userProfile.milestones = Array.isArray(userProfile.milestones) ? userProfile.milestones : [];
 }
@@ -390,6 +517,30 @@ function saveProfile() {
         saveProfileToFirestore().catch(error => {
             console.error('Error saving profile to Firestore:', error);
         });
+    }
+}
+
+function syncTimedItems() {
+    let challengesChanged = false;
+    let workoutsChanged = false;
+
+    challenges.forEach(challenge => {
+        if (recordTimerCompletion(challenge, 'challenge')) {
+            challengesChanged = true;
+        }
+    });
+
+    workouts.forEach(workout => {
+        if (recordTimerCompletion(workout, 'workout')) {
+            workoutsChanged = true;
+        }
+    });
+
+    if (challengesChanged) {
+        saveChallenges();
+    }
+    if (workoutsChanged) {
+        saveWorkouts();
     }
 }
 
@@ -535,6 +686,9 @@ function createChallenge(event) {
     const details = document.getElementById('challengeDetails').value;
     const color = document.querySelector('input[name="color"]:checked').value;
     const isWaterChallenge = selectedGoalCategory === 'health' && selectedChallengeTrackingMode === 'water';
+    const timerEnabled = document.getElementById('challengeTimerEnabled').checked;
+    const durationValue = normalizeDurationValue(document.getElementById('challengeDurationValue').value);
+    const durationUnit = normalizeDurationUnit(document.getElementById('challengeDurationUnit').value);
 
     if (!name.trim()) return;
 
@@ -566,6 +720,11 @@ function createChallenge(event) {
             details,
             category: selectedGoalCategory,
             color,
+            timerEnabled,
+            durationValue,
+            durationUnit,
+            timerCompletedAt: '',
+            timerCompletionRecorded: false,
             trackingMode: isWaterChallenge ? 'water' : 'standard',
             waterQuickAmounts,
             dailyTargetLiters,
@@ -593,6 +752,11 @@ function createChallenge(event) {
             category: selectedGoalCategory,
             color,
             createdDate: new Date().toISOString(),
+            timerEnabled,
+            durationValue,
+            durationUnit,
+            timerCompletedAt: '',
+            timerCompletionRecorded: false,
             trackingMode: isWaterChallenge ? 'water' : 'standard',
             completedDates: {},
             waterHistory: {},
@@ -605,8 +769,8 @@ function createChallenge(event) {
             'challenge-created',
             `Created goal "${name}"`,
             isWaterChallenge
-                ? `Health goal ready to log water with ${challenge.waterQuickAmounts.map(amount => `${formatWaterAmount(amount)}`).join(', ')} quick-add buttons.`
-                : `${getGoalCategoryLabel(selectedGoalCategory)} goal${details ? `: ${details}` : ' is ready to track.'}`
+                ? `Health goal ready to log water with ${challenge.waterQuickAmounts.map(amount => `${formatWaterAmount(amount)}`).join(', ')} quick-add buttons.${timerEnabled ? ` Time limit: ${getTimerSummary(challenge)}.` : ''}`
+                : `${getGoalCategoryLabel(selectedGoalCategory)} goal${details ? `: ${details}` : ' is ready to track.'}${timerEnabled ? ` Time limit: ${getTimerSummary(challenge)}.` : ''}`
         );
     }
     saveChallenges();
@@ -617,6 +781,9 @@ function createChallenge(event) {
     selectedGoalCategory = GOAL_CATEGORIES[0].id;
     selectedChallengeTrackingMode = 'standard';
     document.getElementById('createChallengeForm').reset();
+    document.getElementById('challengeTimerEnabled').checked = false;
+    document.getElementById('challengeDurationValue').value = 2;
+    document.getElementById('challengeDurationUnit').value = 'weeks';
     document.querySelectorAll('input[name="water-quick-size"]').forEach(input => {
         input.checked = input.value === '0.25' || input.value === '0.5';
     });
@@ -634,6 +801,9 @@ function createWorkout(event) {
     const name = document.getElementById('workoutName').value;
     const details = document.getElementById('workoutDetails').value;
     const color = document.querySelector('input[name="workout-color"]:checked').value;
+    const timerEnabled = document.getElementById('workoutTimerEnabled').checked;
+    const durationValue = normalizeDurationValue(document.getElementById('workoutDurationValue').value);
+    const durationUnit = normalizeDurationUnit(document.getElementById('workoutDurationUnit').value);
 
     if (!name.trim() || selectedDays.length === 0) {
         alert('Please select at least one workout day');
@@ -649,31 +819,43 @@ function createWorkout(event) {
             name,
             details,
             color,
-            selectedDays: [...selectedDays]
+            selectedDays: [...selectedDays],
+            timerEnabled,
+            durationValue,
+            durationUnit,
+            timerCompletedAt: '',
+            timerCompletionRecorded: false
         };
+
+        workouts[workoutIndex] = normalizeWorkout(workouts[workoutIndex]);
 
         recordMilestone(
             'workout-updated',
             `Updated workout "${name}"`,
-            `Now scheduled on ${getWorkoutDayNames([...selectedDays]).join(', ')}`
+            `Now scheduled on ${getWorkoutDayNames([...selectedDays]).join(', ')}${timerEnabled ? ` with a ${getTimerSummary(workouts[workoutIndex])} time limit.` : ''}`
         );
     } else {
-        const workout = {
+        const workout = normalizeWorkout({
             id: Date.now(),
             name,
             details,
             color,
             selectedDays: [...selectedDays], // Array of day numbers (0-6)
             createdDate: new Date().toISOString(),
+            timerEnabled,
+            durationValue,
+            durationUnit,
+            timerCompletedAt: '',
+            timerCompletionRecorded: false,
             completedDates: {},
             performances: [] // Array of {date, duration, reps}
-        };
+        });
 
         workouts.push(workout);
         recordMilestone(
             'workout-created',
             `Created workout "${name}"`,
-            `Scheduled on ${getWorkoutDayNames([...selectedDays]).join(', ')}`
+            `Scheduled on ${getWorkoutDayNames([...selectedDays]).join(', ')}${timerEnabled ? ` with a ${getTimerSummary(workout)} time limit.` : ''}`
         );
     }
     saveWorkouts();
@@ -683,6 +865,9 @@ function createWorkout(event) {
     editingWorkoutId = null;
     selectedDays = [];
     document.getElementById('createWorkoutForm').reset();
+    document.getElementById('workoutTimerEnabled').checked = false;
+    document.getElementById('workoutDurationValue').value = 2;
+    document.getElementById('workoutDurationUnit').value = 'weeks';
     document.querySelectorAll('.day-btn').forEach(btn => btn.classList.remove('selected'));
     clearSuggestionSelection('workout');
     closeCreateModal('workout');
@@ -716,6 +901,9 @@ function openEditChallengeModal(challengeId) {
 
     document.getElementById('challengeName').value = challenge.name || '';
     document.getElementById('challengeDetails').value = challenge.details || '';
+    document.getElementById('challengeTimerEnabled').checked = Boolean(challenge.timerEnabled);
+    document.getElementById('challengeDurationValue').value = challenge.durationValue || 2;
+    document.getElementById('challengeDurationUnit').value = challenge.durationUnit || 'weeks';
     document.getElementById('waterDailyTarget').value = challenge.dailyTargetLiters || 2;
     const builtInWaterSizes = new Set(['0.25', '0.5', '0.75', '1']);
     const customWaterAmount = (challenge.waterQuickAmounts || []).find(amount => !builtInWaterSizes.has(String(roundWaterAmount(amount))));
@@ -748,6 +936,9 @@ function openEditWorkoutModal(workoutId) {
 
     document.getElementById('workoutName').value = workout.name || '';
     document.getElementById('workoutDetails').value = workout.details || '';
+    document.getElementById('workoutTimerEnabled').checked = Boolean(workout.timerEnabled);
+    document.getElementById('workoutDurationValue').value = workout.durationValue || 2;
+    document.getElementById('workoutDurationUnit').value = workout.durationUnit || 'weeks';
     document.querySelectorAll('input[name="workout-color"]').forEach(input => {
         input.checked = input.value === workout.color;
     });
@@ -805,6 +996,10 @@ function refreshWaterCompletionState(challenge) {
 function addWaterEntry(challengeId, amountLiters) {
     const challenge = challenges.find(item => item.id === challengeId);
     if (!challenge || challenge.trackingMode !== 'water') return;
+    if (isTimerFinished(challenge)) {
+        alert('This goal has already finished.');
+        return;
+    }
 
     const today = getDateString(new Date());
     const amount = roundWaterAmount(amountLiters);
@@ -835,14 +1030,14 @@ function addWaterEntry(challengeId, amountLiters) {
 
     if (!reachedBefore && reachedNow) {
         const streak = getChallengeStreak(challenge);
-        const points = calculatePoints('challenge', streak);
-        addPoints(points);
+        const rewards = calculateRewards('challenge', streak);
+        addRewards(rewards);
         recordMilestone(
             'water-target-hit',
             `Logged water for "${challenge.name}"`,
             target > 0
-                ? `Reached ${formatWaterAmount(target)} on ${today}.`
-                : `Logged ${formatWaterAmount(nextTotal)} on ${today}.`
+                ? `Reached ${formatWaterAmount(target)} on ${today} and earned ${formatRewardText(rewards)}.`
+                : `Logged ${formatWaterAmount(nextTotal)} on ${today} and earned ${formatRewardText(rewards)}.`
         );
     }
 
@@ -857,15 +1052,18 @@ function toggleChallengeDay(challengeId, dateStr) {
         if (challenge.trackingMode === 'water') {
             return;
         }
+        if (isTimerFinished(challenge)) {
+            alert('This goal has already finished.');
+            return;
+        }
         if (challenge.completedDates[dateStr]) {
             delete challenge.completedDates[dateStr];
         } else {
             challenge.completedDates[dateStr] = true;
-            // Award points when marking as complete
             const streak = getChallengeStreak(challenge);
-            const points = calculatePoints('challenge', streak);
-            addPoints(points);
-            recordMilestone('challenge-complete', `Completed goal "${challenge.name}"`, `${dateStr} completion saved with a ${streak}-day streak.`);
+            const rewards = calculateRewards('challenge', streak);
+            addRewards(rewards);
+            recordMilestone('challenge-complete', `Completed goal "${challenge.name}"`, `${dateStr} completion saved with a ${streak}-day streak and earned ${formatRewardText(rewards)}.`);
         }
         saveChallenges();
         renderChallenges();
@@ -876,15 +1074,18 @@ function toggleChallengeDay(challengeId, dateStr) {
 function toggleWorkoutDay(workoutId, dateStr) {
     const workout = workouts.find(w => w.id === workoutId);
     if (workout) {
+        if (isTimerFinished(workout)) {
+            alert('This workout has already finished.');
+            return;
+        }
         if (workout.completedDates[dateStr]) {
             delete workout.completedDates[dateStr];
         } else {
             workout.completedDates[dateStr] = true;
-            // Award points when marking as complete
             const streak = getWorkoutStreak(workout);
-            const points = calculatePoints('workout', streak);
-            addPoints(points);
-            recordMilestone('workout-complete', `Completed workout "${workout.name}"`, `${dateStr} completion saved with a ${streak}-day streak.`);
+            const rewards = calculateRewards('workout', streak);
+            addRewards(rewards);
+            recordMilestone('workout-complete', `Completed workout "${workout.name}"`, `${dateStr} completion saved with a ${streak}-day streak and earned ${formatRewardText(rewards)}.`);
         }
         saveWorkouts();
         renderWorkouts();
@@ -1125,6 +1326,7 @@ function getMonthDates(year, month) {
 function renderChallenges() {
     const list = document.getElementById('challengesList');
     const empty = document.getElementById('emptyChallengesState');
+    syncTimedItems();
 
     if (challenges.length === 0) {
         list.innerHTML = '';
@@ -1134,15 +1336,21 @@ function renderChallenges() {
 
     empty.style.display = 'none';
 
-    list.innerHTML = challenges.map(challenge => challenge.trackingMode === 'water'
-        ? renderWaterChallengeCard(challenge)
+    list.innerHTML = challenges.map(challenge => {
+        const timerStatus = getTimerStatus(challenge);
+        return challenge.trackingMode === 'water'
+        ? renderWaterChallengeCard(challenge, timerStatus)
         : `
-            <div class="challenge-card" style="border-left-color: ${challenge.color}">
+            <div class="challenge-card ${timerStatus.phase === 'completed' ? 'timed-complete-card' : ''}" style="border-left-color: ${challenge.color}">
                 <div class="challenge-header">
                     <div class="challenge-title">
                         <h3>${challenge.name}</h3>
                         <p class="goal-category-badge">${getGoalCategoryLabel(challenge.category)}</p>
                         <p class="challenge-details">${challenge.details}</p>
+                        <div class="timer-meta">
+                            <span class="timer-chip ${timerStatus.phase}">${timerStatus.label}</span>
+                            <span class="timer-text">${getTimerSummary(challenge)}</span>
+                        </div>
                     </div>
                     <div class="card-actions">
                         <button class="btn-edit" type="button" onclick="openEditChallengeModal(${challenge.id})">Edit</button>
@@ -1159,11 +1367,11 @@ function renderChallenges() {
                 ${renderCalendar(challenge, 'challenge')}
             </div>
         `
-    ).join('');
+    }).join('');
 }
 
-function renderWaterChallengeCard(challenge) {
-    const today = getDateString(new Date());
+function renderWaterChallengeCard(challenge, timerStatus = getTimerStatus(challenge)) {
+    const today = getTodayDateString();
     const todayEntry = getWaterEntryForDate(challenge, today);
     const dailyTarget = Number(challenge.dailyTargetLiters || 0);
     const progressPercent = dailyTarget > 0
@@ -1174,12 +1382,16 @@ function renderWaterChallengeCard(challenge) {
         .slice(0, 7);
 
     return `
-        <div class="challenge-card water-challenge-card" style="border-left-color: ${challenge.color}">
+        <div class="challenge-card water-challenge-card ${timerStatus.phase === 'completed' ? 'timed-complete-card' : ''}" style="border-left-color: ${challenge.color}">
             <div class="challenge-header">
                 <div class="challenge-title">
                     <h3>${challenge.name}</h3>
                     <p class="goal-category-badge">Health • Water</p>
                     <p class="challenge-details">${challenge.details}</p>
+                    <div class="timer-meta">
+                        <span class="timer-chip ${timerStatus.phase}">${timerStatus.label}</span>
+                        <span class="timer-text">${getTimerSummary(challenge)}</span>
+                    </div>
                 </div>
                 <button class="btn-delete" data-id="${challenge.id}" onclick="deleteChallenge(${challenge.id})">🗑️</button>
             </div>
@@ -1215,7 +1427,7 @@ function renderWaterChallengeCard(challenge) {
             </div>
 
             <div class="water-quick-actions">
-                ${challenge.waterQuickAmounts.map(amount => `
+                ${timerStatus.phase === 'completed' ? '<p class="timer-locked-note">This goal is finished, so water logging is locked.</p>' : challenge.waterQuickAmounts.map(amount => `
                     <button
                         type="button"
                         class="water-add-btn"
@@ -1255,6 +1467,7 @@ function renderWaterChallengeCard(challenge) {
 function renderWorkouts() {
     const list = document.getElementById('workoutsList');
     const empty = document.getElementById('emptyWorkoutsState');
+    syncTimedItems();
 
     if (workouts.length === 0) {
         list.innerHTML = '';
@@ -1264,8 +1477,10 @@ function renderWorkouts() {
 
     empty.style.display = 'none';
 
-    list.innerHTML = workouts.map(workout => `
-        <div class="workout-card" style="border-left-color: ${workout.color}">
+    list.innerHTML = workouts.map(workout => {
+        const timerStatus = getTimerStatus(workout);
+        return `
+        <div class="workout-card ${timerStatus.phase === 'completed' ? 'timed-complete-card' : ''}" style="border-left-color: ${workout.color}">
             <div class="challenge-header">
                 <div class="challenge-title">
                     <h3>${workout.name}</h3>
@@ -1273,6 +1488,10 @@ function renderWorkouts() {
                     <p class="challenge-details" style="font-size: 12px; margin-top: 4px;">
                         Days: ${getWorkoutDayNames(workout.selectedDays).join(', ')}
                     </p>
+                    <div class="timer-meta">
+                        <span class="timer-chip ${timerStatus.phase}">${timerStatus.label}</span>
+                        <span class="timer-text">${getTimerSummary(workout)}</span>
+                    </div>
                 </div>
                 <button class="btn-delete" onclick="deleteWorkout(${workout.id})">🗑️</button>
             </div>
@@ -1283,7 +1502,7 @@ function renderWorkouts() {
                 <span class="streak-label">streak</span>
             </div>
 
-            <button class="start-workout-btn" onclick="startGhostMode(${workout.id})">👻 Start Workout</button>
+            <button class="start-workout-btn" onclick="startGhostMode(${workout.id})" ${timerStatus.phase === 'completed' ? 'disabled' : ''}>👻 Start Workout</button>
 
             <div class="water-quick-actions">
                 <button
@@ -1297,7 +1516,8 @@ function renderWorkouts() {
 
             ${renderCalendar(workout, 'workout')}
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 // Render calendar for a challenge or workout
@@ -1324,6 +1544,7 @@ function renderCalendar(item, type) {
     for (const {date, isCurrentMonth, dateStr} of dates) {
         const dayOfWeek = date.getDay();
         const isWaterChallenge = type === 'challenge' && item.trackingMode === 'water';
+        const timerFinished = isTimerFinished(item);
         const waterEntry = isWaterChallenge ? getWaterEntryForDate(item, dateStr) : null;
         const progressDates = isWaterChallenge ? getWaterProgressDates(item) : item.completedDates;
         const isCompleted = progressDates[dateStr];
@@ -1347,7 +1568,7 @@ function renderCalendar(item, type) {
         const dataAttr = type === 'challenge' 
             ? `data-challenge-id="${item.id}" data-date="${dateStr}"`
             : `data-workout-id="${item.id}" data-date="${dateStr}"`;
-        const onClickAttr = (isOtherMonth || (type === 'workout' && !isSelectedDay) || isWaterChallenge) ? '' : dataAttr;
+        const onClickAttr = (isOtherMonth || (type === 'workout' && !isSelectedDay) || isWaterChallenge || timerFinished) ? '' : dataAttr;
         const dayContent = isWaterChallenge && waterEntry.totalLiters > 0
             ? `<div class="calendar-water-value">${formatWaterAmountCompact(waterEntry.totalLiters)}</div>`
             : (isCompleted ? '✓' : dayNum);
@@ -1400,6 +1621,10 @@ function openCreateModal(type) {
         editingChallengeId = null;
         selectedGoalCategory = GOAL_CATEGORIES[0].id;
         selectedChallengeTrackingMode = 'standard';
+        document.getElementById('createChallengeForm').reset();
+        document.getElementById('challengeTimerEnabled').checked = false;
+        document.getElementById('challengeDurationValue').value = 2;
+        document.getElementById('challengeDurationUnit').value = 'weeks';
         document.querySelector('#createChallengeModal .modal-header h2').textContent = 'New Goal';
         document.getElementById('challengeSubmitButton').textContent = 'Create Goal';
         renderGoalCategoryOptions();
@@ -1410,6 +1635,10 @@ function openCreateModal(type) {
     } else if (type === 'workout') {
         editingWorkoutId = null;
         selectedDays = [];
+        document.getElementById('createWorkoutForm').reset();
+        document.getElementById('workoutTimerEnabled').checked = false;
+        document.getElementById('workoutDurationValue').value = 2;
+        document.getElementById('workoutDurationUnit').value = 'weeks';
         document.querySelector('#createWorkoutModal .modal-header h2').textContent = 'New Workout';
         document.getElementById('workoutSubmitButton').textContent = 'Create Workout';
         updateDayPickerUI();
@@ -1421,11 +1650,17 @@ function openCreateModal(type) {
 function closeCreateModal(type) {
     if (type === 'challenge') {
         editingChallengeId = null;
+        document.getElementById('challengeTimerEnabled').checked = false;
+        document.getElementById('challengeDurationValue').value = 2;
+        document.getElementById('challengeDurationUnit').value = 'weeks';
         document.querySelector('#createChallengeModal .modal-header h2').textContent = 'New Goal';
         document.getElementById('challengeSubmitButton').textContent = 'Create Goal';
         document.getElementById('createChallengeModal').classList.remove('active');
     } else if (type === 'workout') {
         editingWorkoutId = null;
+        document.getElementById('workoutTimerEnabled').checked = false;
+        document.getElementById('workoutDurationValue').value = 2;
+        document.getElementById('workoutDurationUnit').value = 'weeks';
         document.querySelector('#createWorkoutModal .modal-header h2').textContent = 'New Workout';
         document.getElementById('workoutSubmitButton').textContent = 'Create Workout';
         document.getElementById('createWorkoutModal').classList.remove('active');
@@ -1524,12 +1759,14 @@ function getLeaderboardEntryFromDoc(docSnap) {
         getUserMaxChallengeStreak(docChallenges),
         getUserMaxWorkoutStreak(docWorkouts)
     );
+    const money = Number(data.money || 0);
     const points = Number(data.points || 0);
 
     return {
         id: docSnap.id,
         username: data.username || data.email?.split('@')[0] || 'Athlete',
         email: data.email || '',
+        money,
         points,
         shields: Number(data.shields || 0),
         unlockedBadges: Array.isArray(data.unlockedBadges) ? data.unlockedBadges : [],
@@ -1656,8 +1893,16 @@ function openLeaderboardUserModal(userEntryId) {
         </div>
         <div class="leaderboard-user-grid">
             <div class="leaderboard-user-stat">
+                <strong>${athlete.money}</strong>
+                <span>Total money</span>
+            </div>
+            <div class="leaderboard-user-stat">
                 <strong>${athlete.points}</strong>
                 <span>Total points</span>
+            </div>
+            <div class="leaderboard-user-stat">
+                <strong>${athlete.shields}</strong>
+                <span>Shields owned</span>
             </div>
             <div class="leaderboard-user-stat">
                 <strong>${athlete.bestStreak}</strong>
@@ -1666,10 +1911,6 @@ function openLeaderboardUserModal(userEntryId) {
             <div class="leaderboard-user-stat">
                 <strong>${athlete.badgeCount}</strong>
                 <span>Badges earned</span>
-            </div>
-            <div class="leaderboard-user-stat">
-                <strong>${athlete.shields}</strong>
-                <span>Shields saved</span>
             </div>
             <div class="leaderboard-user-stat">
                 <strong>${athlete.challengeCount}</strong>
@@ -1726,6 +1967,11 @@ function getBestPerformance(workoutId) {
 function startGhostMode(workoutId) {
     ghostModeWorkout = workouts.find(w => w.id === workoutId);
     if (!ghostModeWorkout) return;
+    if (isTimerFinished(ghostModeWorkout)) {
+        alert('This workout has already finished.');
+        ghostModeWorkout = null;
+        return;
+    }
 
     // Initialize performance object
     ghostModePerformance = {
@@ -1892,6 +2138,11 @@ function showGhostResults() {
 // Save the workout performance and mark day as complete
 function finishWorkout() {
     if (!ghostModeWorkout) return;
+    if (isTimerFinished(ghostModeWorkout)) {
+        alert('This workout has already finished.');
+        closeGhostResults();
+        return;
+    }
 
     // Initialize performances array if it doesn't exist
     if (!ghostModeWorkout.performances) {
@@ -1909,14 +2160,13 @@ function finishWorkout() {
     const today = getDateString(new Date());
     ghostModeWorkout.completedDates[today] = true;
 
-    // Award points for ghost mode workout
     const streak = getWorkoutStreak(ghostModeWorkout);
-    const points = calculatePoints('workout', streak);
-    addPoints(points);
+    const rewards = calculateRewards('workout', streak);
+    addRewards(rewards);
     recordMilestone(
         'ghost-workout',
         `Finished Ghost Mode for "${ghostModeWorkout.name}"`,
-        `Time: ${formatTime(ghostModePerformance.duration)}${ghostModePerformance.reps ? `, Reps: ${ghostModePerformance.reps}` : ''}.`
+        `Time: ${formatTime(ghostModePerformance.duration)}${ghostModePerformance.reps ? `, Reps: ${ghostModePerformance.reps}` : ''}. Earned ${formatRewardText(rewards)}.`
     );
 
     saveWorkouts();
@@ -2091,23 +2341,38 @@ const AVATAR_STAGES = [
     { points: 1000, icon: '👑', name: 'Titan', description: 'Unstoppable force!' }
 ];
 
-// Calculate points earned based on activity
-function calculatePoints(type, streak) {
-    // Base points: 10 for challenge, 20 for workout
-    const basePoints = type === 'challenge' ? 10 : 20;
-    
-    // Streak multiplier
+const SHIELD_COST = 100;
+
+function getRewardMultiplier(streak) {
     let multiplier = 1;
     if (streak >= 31) multiplier = 3;      // 31+ days: 3x
     else if (streak >= 15) multiplier = 2;  // 15-30 days: 2x
     else if (streak >= 8) multiplier = 1.5; // 8-14 days: 1.5x
-    
-    return Math.floor(basePoints * multiplier);
+
+    return multiplier;
 }
 
-// Add points to profile
-function addPoints(amount, reason = '') {
-    userProfile.points += amount;
+// Calculate money and points earned based on activity
+function calculateRewards(type, streak) {
+    const isChallenge = type === 'challenge';
+    const basePoints = isChallenge ? 10 : 20;
+    const baseMoney = isChallenge ? 5 : 10;
+    const multiplier = getRewardMultiplier(streak);
+
+    return {
+        points: Math.floor(basePoints * multiplier),
+        money: Math.floor(baseMoney * multiplier)
+    };
+}
+
+function formatRewardText(rewards) {
+    return `+${rewards.points} points and +${rewards.money} money`;
+}
+
+// Add rewards to profile
+function addRewards(rewards) {
+    userProfile.points += rewards.points;
+    userProfile.money += rewards.money;
     saveProfile();
     updateProfileCard();
     
@@ -2131,9 +2396,9 @@ function updateProfileCard() {
     
     document.getElementById('avatarIcon').textContent = avatar.icon;
     document.getElementById('avatarRank').textContent = avatar.name;
+    document.getElementById('totalMoney').textContent = userProfile.money;
     document.getElementById('totalPoints').textContent = userProfile.points;
     document.getElementById('shieldCount').textContent = userProfile.shields;
-    document.getElementById('badgeCount').textContent = userProfile.unlockedBadges.length;
 
     const profileName = document.getElementById('profileName');
     const profileEmail = document.getElementById('profileEmail');
@@ -2161,6 +2426,7 @@ function openProfileModal() {
     document.getElementById('profileAvatarIcon').textContent = avatar.icon;
     document.getElementById('profileRankTitle').textContent = avatar.name;
     document.getElementById('profileRankDescription').textContent = avatar.description;
+    document.getElementById('profileMoney').textContent = userProfile.money;
     document.getElementById('profilePoints').textContent = userProfile.points;
     document.getElementById('profileShields').textContent = userProfile.shields;
     
@@ -2183,7 +2449,7 @@ function openProfileModal() {
     
     // Update shield buying button
     const buyBtn = document.querySelector('.btn-buy-shield');
-    if (userProfile.points >= 100) {
+    if (userProfile.money >= SHIELD_COST) {
         buyBtn.disabled = false;
     } else {
         buyBtn.disabled = true;
@@ -2387,17 +2653,17 @@ function showBadgeUnlock(id, badge) {
     console.log(`🎉 Badge Unlocked: ${badge.name}!`);
 }
 
-// Buy a shield with points
+// Buy a shield with money
 function buyShield() {
-    if (userProfile.points >= 100) {
-        userProfile.points -= 100;
+    if (userProfile.money >= SHIELD_COST) {
+        userProfile.money -= SHIELD_COST;
         userProfile.shields += 1;
-        recordMilestone('shield', 'Bought a streak shield', '100 points exchanged for 1 shield.');
+        recordMilestone('shield', 'Bought a streak shield', `${SHIELD_COST} money exchanged for 1 shield.`);
         saveProfile();
         updateProfileCard();
         openProfileModal(); // Refresh the modal
         alert('🛡️ Shield purchased!');
     } else {
-        alert('Not enough points! (Need 100, have ' + userProfile.points + ')');
+        alert('Not enough money! (Need ' + SHIELD_COST + ', have ' + userProfile.money + ')');
     }
 }
