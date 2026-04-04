@@ -81,7 +81,7 @@ const GOAL_SUGGESTIONS = {
         { name: 'Water Intake Tracker', details: 'Log every glass or bottle and keep a daily water history.', trackingMode: 'water' },
         { name: 'Healthy Meal Check-In', details: 'Track one clean, balanced meal each day.' },
         { name: 'Sleep 8 Hours', details: 'Aim for at least 8 hours of sleep every night.' },
-        { name: 'Vitamins Daily', details: 'Take your supplements or vitamins every day.' },
+        { name: 'Vitamins Daily', details: 'Take your supplements or vitamins every day.', trackingMode: 'vitamin' },
         { name: 'Custom Health Goal', details: 'Create your own health and wellness habit.', custom: true }
     ],
     'personal-life': [
@@ -263,6 +263,16 @@ function roundWaterAmount(value) {
     return Math.round(Number(value) * 100) / 100;
 }
 
+function roundVitaminAmount(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return 0;
+    return Math.max(0, Math.round(parsed));
+}
+
+function sanitizeVitaminName(name) {
+    return String(name || '').trim();
+}
+
 function getTodayDateString() {
     return getDateString(new Date());
 }
@@ -378,9 +388,38 @@ function sanitizeWaterQuickAmounts(amounts = []) {
     return unique.sort((a, b) => a - b);
 }
 
+function getVitaminNameFromInputs() {
+    const preset = document.getElementById('vitaminPreset')?.value || '';
+    const customName = sanitizeVitaminName(document.getElementById('vitaminCustomName')?.value || '');
+    return preset === 'custom' ? customName : customName || preset;
+}
+
+function updateVitaminDraftFields() {
+    if (selectedChallengeTrackingMode !== 'vitamin') return;
+
+    const vitaminName = getVitaminNameFromInputs() || 'Vitamin';
+    const nameInput = document.getElementById('challengeName');
+    const detailsInput = document.getElementById('challengeDetails');
+
+    if (!nameInput || !detailsInput) return;
+
+    if (!nameInput.value.trim() || / intake$/i.test(nameInput.value.trim())) {
+        nameInput.value = `${vitaminName} Intake`;
+    }
+
+    if (!detailsInput.value.trim() || /Track your daily .* intake and hit your supplement goal\./i.test(detailsInput.value.trim())) {
+        detailsInput.value = `Track your daily ${vitaminName.toLowerCase()} intake and hit your supplement goal.`;
+    }
+}
+
 function normalizeChallenge(challenge = {}) {
-    const trackingMode = challenge.trackingMode === 'water' ? 'water' : 'standard';
+    const trackingMode = challenge.trackingMode === 'water'
+        ? 'water'
+        : challenge.trackingMode === 'vitamin'
+            ? 'vitamin'
+            : 'standard';
     const waterHistory = challenge && typeof challenge.waterHistory === 'object' ? challenge.waterHistory : {};
+    const vitaminHistory = challenge && typeof challenge.vitaminHistory === 'object' ? challenge.vitaminHistory : {};
     const timeSettings = normalizeTimeSettings(challenge);
 
     return {
@@ -389,11 +428,18 @@ function normalizeChallenge(challenge = {}) {
         trackingMode,
         completedDates: challenge && typeof challenge.completedDates === 'object' ? challenge.completedDates : {},
         waterHistory,
+        vitaminHistory,
         waterQuickAmounts: trackingMode === 'water'
             ? sanitizeWaterQuickAmounts(Array.isArray(challenge.waterQuickAmounts) ? challenge.waterQuickAmounts : [0.25, 0.5, 1])
             : [],
         dailyTargetLiters: trackingMode === 'water'
             ? roundWaterAmount(Number(challenge.dailyTargetLiters || 0)) || 0
+            : 0,
+        vitaminName: trackingMode === 'vitamin'
+            ? sanitizeVitaminName(challenge.vitaminName || challenge.name || '')
+            : '',
+        vitaminDailyTarget: trackingMode === 'vitamin'
+            ? Math.max(1, roundVitaminAmount(challenge.vitaminDailyTarget || 1))
             : 0
     };
 }
@@ -422,6 +468,18 @@ document.addEventListener('DOMContentLoaded', () => {
     renderSuggestionOptions('challenge');
     renderSuggestionOptions('workout');
     renderLeaderboard();
+
+    document.getElementById('vitaminPreset')?.addEventListener('change', () => {
+        updateVitaminDraftFields();
+    });
+
+    document.getElementById('vitaminCustomName')?.addEventListener('input', () => {
+        const preset = document.getElementById('vitaminPreset');
+        if (preset && document.getElementById('vitaminCustomName').value.trim()) {
+            preset.value = 'custom';
+        }
+        updateVitaminDraftFields();
+    });
 
     // Event delegation for challenge calendar days
     document.getElementById('challengesList').addEventListener('click', (e) => {
@@ -582,7 +640,7 @@ function renderGoalCategoryOptions() {
 
 function selectGoalCategory(categoryId) {
     selectedGoalCategory = categoryId;
-    if (categoryId !== 'health' && selectedChallengeTrackingMode === 'water') {
+    if (categoryId !== 'health' && ['water', 'vitamin'].includes(selectedChallengeTrackingMode)) {
         selectedChallengeTrackingMode = 'standard';
     }
     renderGoalCategoryOptions();
@@ -594,7 +652,7 @@ function selectGoalCategory(categoryId) {
 }
 
 function selectChallengeTrackingMode(mode) {
-    selectedChallengeTrackingMode = mode === 'water' ? 'water' : 'standard';
+    selectedChallengeTrackingMode = ['water', 'vitamin'].includes(mode) ? mode : 'standard';
     updateChallengeTrackingModeUI();
 
     if (selectedChallengeTrackingMode === 'water') {
@@ -606,14 +664,18 @@ function selectChallengeTrackingMode(mode) {
         if (!detailsInput.value.trim()) {
             detailsInput.value = 'Track your daily water consumption glass by glass.';
         }
+    } else if (selectedChallengeTrackingMode === 'vitamin') {
+        updateVitaminDraftFields();
     }
 }
 
 function updateChallengeTrackingModeUI() {
     const trackingGroup = document.getElementById('challengeTrackingModeGroup');
     const waterFields = document.getElementById('waterChallengeFields');
+    const vitaminFields = document.getElementById('vitaminChallengeFields');
     const isHealthCategory = selectedGoalCategory === 'health';
     const isWaterMode = isHealthCategory && selectedChallengeTrackingMode === 'water';
+    const isVitaminMode = isHealthCategory && selectedChallengeTrackingMode === 'vitamin';
 
     if (trackingGroup) {
         trackingGroup.style.display = isHealthCategory ? 'block' : 'none';
@@ -623,8 +685,13 @@ function updateChallengeTrackingModeUI() {
         waterFields.style.display = isWaterMode ? 'block' : 'none';
     }
 
-    document.getElementById('challengeModeStandard')?.classList.toggle('active', !isWaterMode);
+    if (vitaminFields) {
+        vitaminFields.style.display = isVitaminMode ? 'block' : 'none';
+    }
+
+    document.getElementById('challengeModeStandard')?.classList.toggle('active', !isWaterMode && !isVitaminMode);
     document.getElementById('challengeModeWater')?.classList.toggle('active', isWaterMode);
+    document.getElementById('challengeModeVitamin')?.classList.toggle('active', isVitaminMode);
 }
 
 function renderSuggestionOptions(type) {
@@ -660,11 +727,29 @@ function applySuggestion(type, index) {
 
     if (type === 'challenge') {
         if (selectedGoalCategory === 'health') {
-            selectedChallengeTrackingMode = suggestion.trackingMode === 'water' ? 'water' : 'standard';
+            selectedChallengeTrackingMode = suggestion.trackingMode === 'water'
+                ? 'water'
+                : suggestion.trackingMode === 'vitamin'
+                    ? 'vitamin'
+                    : 'standard';
             updateChallengeTrackingModeUI();
         }
         document.getElementById('challengeName').value = suggestion.custom ? '' : suggestion.name;
         document.getElementById('challengeDetails').value = suggestion.custom ? '' : suggestion.details;
+
+        if (!suggestion.custom && suggestion.trackingMode === 'vitamin') {
+            const derivedVitaminName = suggestion.name.replace(/\s+Daily$/i, '').trim() || 'Vitamin';
+            const presetSelect = document.getElementById('vitaminPreset');
+            const customNameInput = document.getElementById('vitaminCustomName');
+            if (presetSelect) {
+                const hasMatchingOption = Array.from(presetSelect.options).some(option => option.value === derivedVitaminName);
+                presetSelect.value = hasMatchingOption ? derivedVitaminName : 'custom';
+            }
+            if (customNameInput) {
+                customNameInput.value = derivedVitaminName;
+            }
+            updateVitaminDraftFields();
+        }
     } else {
         document.getElementById('workoutName').value = suggestion.custom ? '' : suggestion.name;
         document.getElementById('workoutDetails').value = suggestion.custom ? '' : suggestion.details;
@@ -686,6 +771,7 @@ function createChallenge(event) {
     const details = document.getElementById('challengeDetails').value;
     const color = document.querySelector('input[name="color"]:checked').value;
     const isWaterChallenge = selectedGoalCategory === 'health' && selectedChallengeTrackingMode === 'water';
+    const isVitaminChallenge = selectedGoalCategory === 'health' && selectedChallengeTrackingMode === 'vitamin';
     const timerEnabled = document.getElementById('challengeTimerEnabled').checked;
     const durationValue = normalizeDurationValue(document.getElementById('challengeDurationValue').value);
     const durationUnit = normalizeDurationUnit(document.getElementById('challengeDurationUnit').value);
@@ -694,6 +780,8 @@ function createChallenge(event) {
 
     let dailyTargetLiters = 0;
     let waterQuickAmounts = [];
+    let vitaminName = '';
+    let vitaminDailyTarget = 0;
 
     if (isWaterChallenge) {
         dailyTargetLiters = roundWaterAmount(Number(document.getElementById('waterDailyTarget').value || 0));
@@ -706,6 +794,16 @@ function createChallenge(event) {
 
         if (waterQuickAmounts.length === 0) {
             waterQuickAmounts = [0.5, 1];
+        }
+    }
+
+    if (isVitaminChallenge) {
+        vitaminName = getVitaminNameFromInputs();
+        vitaminDailyTarget = Math.max(1, roundVitaminAmount(document.getElementById('vitaminDailyTarget').value || 1));
+
+        if (!vitaminName) {
+            alert('Please choose or type a vitamin name.');
+            return;
         }
     }
 
@@ -725,15 +823,20 @@ function createChallenge(event) {
             durationUnit,
             timerCompletedAt: '',
             timerCompletionRecorded: false,
-            trackingMode: isWaterChallenge ? 'water' : 'standard',
+            trackingMode: isWaterChallenge ? 'water' : isVitaminChallenge ? 'vitamin' : 'standard',
             waterQuickAmounts,
             dailyTargetLiters,
-            completedDates: isWaterChallenge ? existingChallenge.completedDates : (existingChallenge.completedDates || {}),
-            waterHistory: isWaterChallenge ? (existingChallenge.waterHistory || {}) : {}
+            vitaminName,
+            vitaminDailyTarget,
+            completedDates: (isWaterChallenge || isVitaminChallenge) ? existingChallenge.completedDates : (existingChallenge.completedDates || {}),
+            waterHistory: isWaterChallenge ? (existingChallenge.waterHistory || {}) : {},
+            vitaminHistory: isVitaminChallenge ? (existingChallenge.vitaminHistory || {}) : {}
         });
 
         if (updatedChallenge.trackingMode === 'water') {
             refreshWaterCompletionState(updatedChallenge);
+        } else if (updatedChallenge.trackingMode === 'vitamin') {
+            refreshVitaminCompletionState(updatedChallenge);
         }
 
         challenges[challengeIndex] = updatedChallenge;
@@ -742,6 +845,8 @@ function createChallenge(event) {
             `Updated goal "${name}"`,
             isWaterChallenge
                 ? `Adjusted water settings to ${updatedChallenge.waterQuickAmounts.map(amount => formatWaterAmount(amount)).join(', ')} with a ${formatWaterAmount(updatedChallenge.dailyTargetLiters || 0)} target.`
+                : isVitaminChallenge
+                    ? `Adjusted ${updatedChallenge.vitaminName} tracking to a daily goal of ${updatedChallenge.vitaminDailyTarget}.`
                 : `${getGoalCategoryLabel(selectedGoalCategory)} goal updated${details ? `: ${details}` : '.'}`
         );
     } else {
@@ -757,11 +862,14 @@ function createChallenge(event) {
             durationUnit,
             timerCompletedAt: '',
             timerCompletionRecorded: false,
-            trackingMode: isWaterChallenge ? 'water' : 'standard',
+            trackingMode: isWaterChallenge ? 'water' : isVitaminChallenge ? 'vitamin' : 'standard',
             completedDates: {},
             waterHistory: {},
+            vitaminHistory: {},
             waterQuickAmounts,
-            dailyTargetLiters
+            dailyTargetLiters,
+            vitaminName,
+            vitaminDailyTarget
         });
 
         challenges.push(challenge);
@@ -770,6 +878,8 @@ function createChallenge(event) {
             `Created goal "${name}"`,
             isWaterChallenge
                 ? `Health goal ready to log water with ${challenge.waterQuickAmounts.map(amount => `${formatWaterAmount(amount)}`).join(', ')} quick-add buttons.${timerEnabled ? ` Time limit: ${getTimerSummary(challenge)}.` : ''}`
+                : isVitaminChallenge
+                    ? `Health goal ready to track ${challenge.vitaminName} with a daily goal of ${challenge.vitaminDailyTarget}.${timerEnabled ? ` Time limit: ${getTimerSummary(challenge)}.` : ''}`
                 : `${getGoalCategoryLabel(selectedGoalCategory)} goal${details ? `: ${details}` : ' is ready to track.'}${timerEnabled ? ` Time limit: ${getTimerSummary(challenge)}.` : ''}`
         );
     }
@@ -787,6 +897,9 @@ function createChallenge(event) {
     document.querySelectorAll('input[name="water-quick-size"]').forEach(input => {
         input.checked = input.value === '0.25' || input.value === '0.5';
     });
+    document.getElementById('vitaminPreset').value = 'Vitamin D';
+    document.getElementById('vitaminCustomName').value = '';
+    document.getElementById('vitaminDailyTarget').value = 1;
     renderGoalCategoryOptions();
     updateChallengeTrackingModeUI();
     renderSuggestionOptions('challenge');
@@ -897,7 +1010,11 @@ function openEditChallengeModal(challengeId) {
 
     editingChallengeId = challengeId;
     selectedGoalCategory = challenge.category || GOAL_CATEGORIES[0].id;
-    selectedChallengeTrackingMode = challenge.trackingMode === 'water' ? 'water' : 'standard';
+    selectedChallengeTrackingMode = challenge.trackingMode === 'water'
+        ? 'water'
+        : challenge.trackingMode === 'vitamin'
+            ? 'vitamin'
+            : 'standard';
 
     document.getElementById('challengeName').value = challenge.name || '';
     document.getElementById('challengeDetails').value = challenge.details || '';
@@ -905,9 +1022,15 @@ function openEditChallengeModal(challengeId) {
     document.getElementById('challengeDurationValue').value = challenge.durationValue || 2;
     document.getElementById('challengeDurationUnit').value = challenge.durationUnit || 'weeks';
     document.getElementById('waterDailyTarget').value = challenge.dailyTargetLiters || 2;
+    document.getElementById('vitaminDailyTarget').value = challenge.vitaminDailyTarget || 1;
     const builtInWaterSizes = new Set(['0.25', '0.5', '0.75', '1']);
     const customWaterAmount = (challenge.waterQuickAmounts || []).find(amount => !builtInWaterSizes.has(String(roundWaterAmount(amount))));
     document.getElementById('waterCustomQuickSize').value = customWaterAmount || '';
+    const vitaminPreset = document.getElementById('vitaminPreset');
+    const vitaminCustomName = document.getElementById('vitaminCustomName');
+    const hasMatchingVitaminOption = Array.from(vitaminPreset.options).some(option => option.value === challenge.vitaminName);
+    vitaminPreset.value = hasMatchingVitaminOption ? challenge.vitaminName : 'custom';
+    vitaminCustomName.value = challenge.trackingMode === 'vitamin' && !hasMatchingVitaminOption ? (challenge.vitaminName || '') : '';
 
     document.querySelectorAll('input[name="color"]').forEach(input => {
         input.checked = input.value === challenge.color;
@@ -959,6 +1082,43 @@ function formatWaterAmount(amount) {
 function formatWaterAmountCompact(amount) {
     const rounded = roundWaterAmount(amount);
     return rounded >= 1 ? `${rounded}L` : `${Math.round(rounded * 1000)}ml`;
+}
+
+function formatVitaminAmount(amount) {
+    const rounded = roundVitaminAmount(amount);
+    return `${rounded} dose${rounded === 1 ? '' : 's'}`;
+}
+
+function getVitaminEntryForDate(challenge, dateStr) {
+    if (challenge.trackingMode !== 'vitamin') {
+        return { totalCount: 0, entries: [] };
+    }
+
+    const entry = challenge.vitaminHistory?.[dateStr];
+    return {
+        totalCount: roundVitaminAmount(entry?.totalCount || 0),
+        entries: Array.isArray(entry?.entries) ? entry.entries : []
+    };
+}
+
+function getVitaminProgressDates(challenge) {
+    if (challenge.trackingMode !== 'vitamin') {
+        return challenge.completedDates || {};
+    }
+
+    const target = Math.max(1, roundVitaminAmount(challenge.vitaminDailyTarget || 1));
+    const dates = {};
+    Object.keys(challenge.vitaminHistory || {}).forEach(dateStr => {
+        const total = roundVitaminAmount(challenge.vitaminHistory[dateStr]?.totalCount || 0);
+        if (total >= target) {
+            dates[dateStr] = true;
+        }
+    });
+    return dates;
+}
+
+function refreshVitaminCompletionState(challenge) {
+    challenge.completedDates = getVitaminProgressDates(challenge);
 }
 
 function getWaterEntryForDate(challenge, dateStr) {
@@ -1045,11 +1205,61 @@ function addWaterEntry(challengeId, amountLiters) {
     renderChallenges();
 }
 
+function addVitaminEntry(challengeId, amountCount = 1) {
+    const challenge = challenges.find(item => item.id === challengeId);
+    if (!challenge || challenge.trackingMode !== 'vitamin') return;
+    if (isTimerFinished(challenge)) {
+        alert('This goal has already finished.');
+        return;
+    }
+
+    const today = getDateString(new Date());
+    const amount = Math.max(1, roundVitaminAmount(amountCount));
+    const currentEntry = getVitaminEntryForDate(challenge, today);
+    const previousTotal = currentEntry.totalCount;
+    const nextTotal = previousTotal + amount;
+
+    if (!challenge.vitaminHistory) {
+        challenge.vitaminHistory = {};
+    }
+
+    challenge.vitaminHistory[today] = {
+        totalCount: nextTotal,
+        entries: [
+            ...currentEntry.entries,
+            {
+                amountCount: amount,
+                createdAt: new Date().toISOString()
+            }
+        ]
+    };
+
+    const target = Math.max(1, roundVitaminAmount(challenge.vitaminDailyTarget || 1));
+    const reachedBefore = previousTotal >= target;
+    const reachedNow = nextTotal >= target;
+
+    refreshVitaminCompletionState(challenge);
+
+    if (!reachedBefore && reachedNow) {
+        const streak = getChallengeStreak(challenge);
+        const rewards = calculateRewards('challenge', streak);
+        addRewards(rewards);
+        recordMilestone(
+            'vitamin-target-hit',
+            `Logged ${challenge.vitaminName} for "${challenge.name}"`,
+            `Reached ${formatVitaminAmount(target)} on ${today} and earned ${formatRewardText(rewards)}.`
+        );
+    }
+
+    saveChallenges();
+    renderChallenges();
+}
+
 // Toggle day completion for challenge
 function toggleChallengeDay(challengeId, dateStr) {
     const challenge = challenges.find(c => c.id === challengeId);
     if (challenge) {
-        if (challenge.trackingMode === 'water') {
+        if (challenge.trackingMode === 'water' || challenge.trackingMode === 'vitamin') {
             return;
         }
         if (isTimerFinished(challenge)) {
@@ -1097,7 +1307,11 @@ function getChallengeStreak(challenge) {
     const today = getDateString(new Date());
     let streak = 0;
     let currentDate = new Date();
-    const progressDates = getWaterProgressDates(challenge);
+    const progressDates = challenge.trackingMode === 'water'
+        ? getWaterProgressDates(challenge)
+        : challenge.trackingMode === 'vitamin'
+            ? getVitaminProgressDates(challenge)
+            : (challenge.completedDates || {});
 
     while (true) {
         const dateStr = getDateString(currentDate);
@@ -1145,7 +1359,11 @@ function getEarliestCompletedDate(completedDates) {
 }
 
 function getChallengeBestStreak(challenge) {
-    const progressDates = getWaterProgressDates(challenge);
+    const progressDates = challenge.trackingMode === 'water'
+        ? getWaterProgressDates(challenge)
+        : challenge.trackingMode === 'vitamin'
+            ? getVitaminProgressDates(challenge)
+            : (challenge.completedDates || {});
     const earliestDate = getEarliestCompletedDate(progressDates);
     if (!earliestDate) return 0;
 
@@ -1340,6 +1558,8 @@ function renderChallenges() {
         const timerStatus = getTimerStatus(challenge);
         return challenge.trackingMode === 'water'
         ? renderWaterChallengeCard(challenge, timerStatus)
+        : challenge.trackingMode === 'vitamin'
+            ? renderVitaminChallengeCard(challenge, timerStatus)
         : `
             <div class="challenge-card ${timerStatus.phase === 'completed' ? 'timed-complete-card' : ''}" style="border-left-color: ${challenge.color}">
                 <div class="challenge-header">
@@ -1463,6 +1683,97 @@ function renderWaterChallengeCard(challenge, timerStatus = getTimerStatus(challe
     `;
 }
 
+function renderVitaminChallengeCard(challenge, timerStatus = getTimerStatus(challenge)) {
+    const today = getTodayDateString();
+    const todayEntry = getVitaminEntryForDate(challenge, today);
+    const dailyTarget = Math.max(1, roundVitaminAmount(challenge.vitaminDailyTarget || 1));
+    const progressPercent = Math.min(100, Math.round((todayEntry.totalCount / dailyTarget) * 100));
+    const historyRows = Object.entries(challenge.vitaminHistory || {})
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .slice(0, 7);
+
+    return `
+        <div class="challenge-card water-challenge-card ${timerStatus.phase === 'completed' ? 'timed-complete-card' : ''}" style="border-left-color: ${challenge.color}">
+            <div class="challenge-header">
+                <div class="challenge-title">
+                    <h3>${challenge.name}</h3>
+                    <p class="goal-category-badge">Health • Vitamin</p>
+                    <p class="challenge-details">${challenge.details}</p>
+                    <div class="timer-meta">
+                        <span class="timer-chip ${timerStatus.phase}">${timerStatus.label}</span>
+                        <span class="timer-text">${getTimerSummary(challenge)}</span>
+                    </div>
+                </div>
+                <button class="btn-delete" data-id="${challenge.id}" onclick="deleteChallenge(${challenge.id})">🗑️</button>
+            </div>
+
+            <div class="streak-container">
+                ${renderStreakFireButton(getChallengeStreak(challenge))}
+                <span class="streak-count">${getChallengeStreak(challenge)}</span>
+                <span class="streak-label">target streak</span>
+            </div>
+
+            <div class="vitamin-quick-actions">
+                <button
+                    type="button"
+                    class="btn-edit"
+                    onclick="openEditChallengeModal(${challenge.id})"
+                >
+                    Edit Goal
+                </button>
+            </div>
+
+            <div class="vitamin-today-panel">
+                <div>
+                    <p class="vitamin-panel-label">Today</p>
+                    <p class="vitamin-panel-total">${todayEntry.totalCount}/${dailyTarget}</p>
+                    <p class="vitamin-panel-subtitle">${challenge.vitaminName} • Goal ${formatVitaminAmount(dailyTarget)}</p>
+                </div>
+                <div class="vitamin-progress">
+                    <div class="vitamin-progress-bar">
+                        <div class="vitamin-progress-fill" style="width: ${progressPercent}%; background: ${challenge.color};"></div>
+                    </div>
+                    <span>${progressPercent}%</span>
+                </div>
+            </div>
+
+            <div class="vitamin-quick-actions">
+                ${timerStatus.phase === 'completed' ? '<p class="timer-locked-note">This goal is finished, so vitamin logging is locked.</p>' : `
+                    <button
+                        type="button"
+                        class="vitamin-add-btn"
+                        onclick="addVitaminEntry(${challenge.id}, 1)"
+                    >
+                        + 1 dose
+                    </button>
+                `}
+            </div>
+
+            <div class="vitamin-history-panel">
+                <div class="vitamin-history-header">
+                    <h4>Recent Vitamin History</h4>
+                    <span>${historyRows.length} day${historyRows.length === 1 ? '' : 's'}</span>
+                </div>
+                ${historyRows.length > 0 ? `
+                    <div class="vitamin-history-list">
+                        ${historyRows.map(([dateStr, entry]) => `
+                            <div class="vitamin-history-item">
+                                <div>
+                                    <strong>${new Date(`${dateStr}T00:00:00`).toLocaleDateString()}</strong>
+                                    <p>${Array.isArray(entry.entries) ? entry.entries.length : 0} check-in${Array.isArray(entry.entries) && entry.entries.length === 1 ? '' : 's'}</p>
+                                </div>
+                                <span>${formatVitaminAmount(Number(entry.totalCount || 0))}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : '<p class="vitamin-history-empty">No vitamin logged yet. Use the quick button to start tracking.</p>'}
+            </div>
+
+            ${renderCalendar(challenge, 'challenge')}
+        </div>
+    `;
+}
+
 // Render all workouts
 function renderWorkouts() {
     const list = document.getElementById('workoutsList');
@@ -1544,14 +1855,19 @@ function renderCalendar(item, type) {
     for (const {date, isCurrentMonth, dateStr} of dates) {
         const dayOfWeek = date.getDay();
         const isWaterChallenge = type === 'challenge' && item.trackingMode === 'water';
+        const isVitaminChallenge = type === 'challenge' && item.trackingMode === 'vitamin';
         const timerFinished = isTimerFinished(item);
         const waterEntry = isWaterChallenge ? getWaterEntryForDate(item, dateStr) : null;
-        const progressDates = isWaterChallenge ? getWaterProgressDates(item) : item.completedDates;
+        const vitaminEntry = isVitaminChallenge ? getVitaminEntryForDate(item, dateStr) : null;
+        const progressDates = isWaterChallenge
+            ? getWaterProgressDates(item)
+            : isVitaminChallenge
+                ? getVitaminProgressDates(item)
+                : item.completedDates;
         const isCompleted = progressDates[dateStr];
         const isToday = dateStr === today;
         const isOtherMonth = !isCurrentMonth;
 
-        // For workouts, only show days that are selected for the workout
         let isSelectedDay = true;
         if (type === 'workout') {
             isSelectedDay = item.selectedDays.includes(dayOfWeek);
@@ -1560,18 +1876,21 @@ function renderCalendar(item, type) {
         let className = 'calendar-day';
         if (isCompleted) className += ' completed';
         if (isWaterChallenge && waterEntry.totalLiters > 0) className += ' water-logged';
+        if (isVitaminChallenge && vitaminEntry.totalCount > 0) className += ' water-logged';
         if (isToday) className += ' today';
         if (isOtherMonth) className += ' other-month';
-        if (type === 'workout' && !isSelectedDay) className += ' other-month'; // Gray out non-selected days
+        if (type === 'workout' && !isSelectedDay) className += ' other-month';
 
         const dayNum = date.getDate();
-        const dataAttr = type === 'challenge' 
+        const dataAttr = type === 'challenge'
             ? `data-challenge-id="${item.id}" data-date="${dateStr}"`
             : `data-workout-id="${item.id}" data-date="${dateStr}"`;
-        const onClickAttr = (isOtherMonth || (type === 'workout' && !isSelectedDay) || isWaterChallenge || timerFinished) ? '' : dataAttr;
+        const onClickAttr = (isOtherMonth || (type === 'workout' && !isSelectedDay) || isWaterChallenge || isVitaminChallenge || timerFinished) ? '' : dataAttr;
         const dayContent = isWaterChallenge && waterEntry.totalLiters > 0
             ? `<div class="calendar-water-value">${formatWaterAmountCompact(waterEntry.totalLiters)}</div>`
-            : (isCompleted ? '✓' : dayNum);
+            : isVitaminChallenge && vitaminEntry.totalCount > 0
+                ? `<div class="calendar-water-value">${vitaminEntry.totalCount}</div>`
+                : (isCompleted ? '&#10003;' : dayNum);
 
         calendarHTML += `
             <div class="${className}" ${onClickAttr}>

@@ -694,7 +694,8 @@ html[data-auth-hint="signed-out"] #appContainer {
     transform: scale(1.06);
 }
 
-.water-today-panel {
+.water-today-panel,
+.vitamin-today-panel {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -707,25 +708,30 @@ html[data-auth-hint="signed-out"] #appContainer {
 }
 
 .water-panel-label,
-.water-panel-subtitle {
+.water-panel-subtitle,
+.vitamin-panel-label,
+.vitamin-panel-subtitle {
     margin: 0;
     color: var(--text-secondary);
 }
 
-.water-panel-label {
+.water-panel-label,
+.vitamin-panel-label {
     font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.08em;
 }
 
-.water-panel-total {
+.water-panel-total,
+.vitamin-panel-total {
     margin: 6px 0 4px;
     font-size: 28px;
     font-weight: 700;
     color: #7be0f5;
 }
 
-.water-progress {
+.water-progress,
+.vitamin-progress {
     min-width: 120px;
     flex: 1;
     max-width: 180px;
@@ -736,7 +742,8 @@ html[data-auth-hint="signed-out"] #appContainer {
     font-size: 13px;
 }
 
-.water-progress-bar {
+.water-progress-bar,
+.vitamin-progress-bar {
     width: 100%;
     height: 10px;
     border-radius: 999px;
@@ -744,20 +751,23 @@ html[data-auth-hint="signed-out"] #appContainer {
     overflow: hidden;
 }
 
-.water-progress-fill {
+.water-progress-fill,
+.vitamin-progress-fill {
     height: 100%;
     border-radius: inherit;
     transition: width 0.2s ease;
 }
 
-.water-quick-actions {
+.water-quick-actions,
+.vitamin-quick-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
     margin-bottom: 16px;
 }
 
-.water-add-btn {
+.water-add-btn,
+.vitamin-add-btn {
     padding: 10px 14px;
     border-radius: 999px;
     border: 1px solid rgba(123, 224, 245, 0.35);
@@ -768,13 +778,15 @@ html[data-auth-hint="signed-out"] #appContainer {
     transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
 
-.water-add-btn:hover {
+.water-add-btn:hover,
+.vitamin-add-btn:hover {
     transform: translateY(-1px);
     border-color: rgba(123, 224, 245, 0.55);
     background: rgba(123, 224, 245, 0.14);
 }
 
-.water-history-panel {
+.water-history-panel,
+.vitamin-history-panel {
     margin-bottom: 16px;
     padding: 16px;
     border-radius: 14px;
@@ -783,43 +795,56 @@ html[data-auth-hint="signed-out"] #appContainer {
 }
 
 .water-history-header,
-.water-history-item {
+.water-history-item,
+.vitamin-history-header,
+.vitamin-history-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 12px;
 }
 
-.water-history-header {
+.water-history-header,
+.vitamin-history-header {
     margin-bottom: 12px;
 }
 
 .water-history-header h4,
 .water-history-item p,
 .water-history-item strong,
-.water-history-empty {
+.water-history-empty,
+.vitamin-history-header h4,
+.vitamin-history-item p,
+.vitamin-history-item strong,
+.vitamin-history-empty {
     margin: 0;
 }
 
 .water-history-header span,
 .water-history-item p,
-.water-history-empty {
+.water-history-empty,
+.vitamin-history-header span,
+.vitamin-history-item p,
+.vitamin-history-empty {
     color: var(--text-secondary);
     font-size: 13px;
 }
 
-.water-history-list {
+.water-history-list,
+.vitamin-history-list {
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
 
-.water-history-item {
+.water-history-item,
+.vitamin-history-item {
     padding-top: 10px;
     border-top: 1px solid rgba(148, 163, 184, 0.12);
 }
 
-.water-history-item:first-child {
+.water-history-item:first-child,
+.vitamin-history-item:first-child {
     padding-top: 0;
     border-top: none;
 }
@@ -2371,6 +2396,10 @@ html[data-auth-hint="signed-out"] #appContainer {
     border-radius: 16px;
     background: rgba(123, 224, 245, 0.07);
     border: 1px solid rgba(123, 224, 245, 0.18);
+}
+
+#vitaminChallengeFields select {
+    width: 100%;
 }
 
 .water-size-grid {
